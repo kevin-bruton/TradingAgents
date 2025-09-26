@@ -86,6 +86,11 @@ export OPENAI_API_KEY=your_openai_key_here
 export GOOGLE_API_KEY=your_google_api_key_here
 ```
 
+### For OpenRouter
+```bash
+export OPENROUTER_API_KEY=your_openrouter_api_key_here
+```
+
 ## Error Handling Flow
 
 1. **Agent Tool Called** → Online LLM function invoked

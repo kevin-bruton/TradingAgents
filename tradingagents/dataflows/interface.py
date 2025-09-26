@@ -817,24 +817,35 @@ def _call_llm_api(prompt, config):
                 raise ValueError(error_msg) from e
             
     else:
-        # Use OpenAI (default)
+        # Use OpenAI-compatible providers (OpenAI, OpenRouter, Ollama)
         import os
         from openai import OpenAI, AuthenticationError, RateLimitError, NotFoundError
         
-        # Check if API key is available
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError(
-                "❌ OPENAI_API_KEY environment variable is not set.\n"
-                "Please set your OpenAI API key:\n"
-                "export OPENAI_API_KEY=your_key_here"
-            )
+        # Check if API key is available based on provider
+        if provider.lower() == "openrouter":
+            api_key = os.getenv("OPENROUTER_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "❌ OPENROUTER_API_KEY environment variable is not set.\n"
+                    "Please set your OpenRouter API key:\n"
+                    "export OPENROUTER_API_KEY=your_openrouter_key_here\n"
+                    "Get your key from: https://openrouter.ai/keys"
+                )
+        else:
+            # Default to OpenAI
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                raise ValueError(
+                    "❌ OPENAI_API_KEY environment variable is not set.\n"
+                    "Please set your OpenAI API key:\n"
+                    "export OPENAI_API_KEY=your_key_here"
+                )
         
         model = config["quick_think_llm"]
         valid_models = _get_valid_models("openai")
         
         try:
-            client = OpenAI(base_url=config["backend_url"])
+            client = OpenAI(base_url=config["backend_url"], api_key=api_key)
             response = client.chat.completions.create(
                 model=model,
                 messages=[

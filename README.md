@@ -124,6 +124,11 @@ You will need the OpenAI API for all the agents.
 export OPENAI_API_KEY=$YOUR_OPENAI_API_KEY
 ```
 
+If you plan to use OpenRouter as your LLM provider, you'll also need:
+```bash
+export OPENROUTER_API_KEY=$YOUR_OPENROUTER_API_KEY
+```
+
 ### CLI Usage
 
 You can also try out the CLI directly by running:

@@ -59,8 +59,36 @@ class TradingAgentsGraph:
 
         # Initialize LLMs
         if self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
-            self.deep_thinking_llm = ChatOpenAI(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
-            self.quick_thinking_llm = ChatOpenAI(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
+            # Handle API key based on provider
+            api_key = None
+            if self.config["llm_provider"].lower() == "openrouter":
+                api_key = os.getenv("OPENROUTER_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "❌ OPENROUTER_API_KEY environment variable is not set.\n"
+                        "Please set your OpenRouter API key:\n"
+                        "export OPENROUTER_API_KEY=your_openrouter_key_here\n"
+                        "Get your key from: https://openrouter.ai/keys"
+                    )
+            elif self.config["llm_provider"].lower() == "openai":
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError(
+                        "❌ OPENAI_API_KEY environment variable is not set.\n"
+                        "Please set your OpenAI API key:\n"
+                        "export OPENAI_API_KEY=your_openai_key_here"
+                    )
+            
+            self.deep_thinking_llm = ChatOpenAI(
+                model=self.config["deep_think_llm"], 
+                base_url=self.config["backend_url"],
+                api_key=api_key
+            )
+            self.quick_thinking_llm = ChatOpenAI(
+                model=self.config["quick_think_llm"], 
+                base_url=self.config["backend_url"],
+                api_key=api_key
+            )
         elif self.config["llm_provider"].lower() == "anthropic":
             self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
             self.quick_thinking_llm = ChatAnthropic(model=self.config["quick_think_llm"], base_url=self.config["backend_url"])
