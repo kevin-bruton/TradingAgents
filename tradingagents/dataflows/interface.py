@@ -13,6 +13,7 @@ import pandas as pd
 from tqdm import tqdm
 import yfinance as yf
 from openai import OpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from .config import get_config, set_config, DATA_DIR
 
 
@@ -702,106 +703,237 @@ def get_YFin_data(
     return filtered_data
 
 
-def get_stock_news_openai(ticker, curr_date):
-    config = get_config()
-    client = OpenAI(base_url=config["backend_url"])
+def _get_valid_models(provider):
+    """Get list of valid models for a given provider"""
+    if provider == "gemini":
+        return [
+            "gemini-1.5-pro",
+            "gemini-1.5-flash", 
+            "gemini-1.0-pro",
+            "gemini-pro"
+        ]
+    elif provider == "openai":
+        return [
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4-turbo",
+            "gpt-4",
+            "gpt-3.5-turbo",
+            "o1-preview",
+            "o1-mini"
+        ]
+    else:
+        return []
 
-    response = client.responses.create(
-        model=config["quick_think_llm"],
-        input=[
-            {
-                "role": "system",
-                "content": [
+
+def _call_llm_api(prompt, config):
+    """Helper function to call either OpenAI or Gemini API based on configuration"""
+    provider = config["llm_provider"]
+    
+    if provider == "gemini":
+        # Use Gemini
+        import os
+        from google.api_core.exceptions import NotFound, ResourceExhausted
+        
+        # Check if API key is available
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "❌ GOOGLE_API_KEY environment variable is not set.\n"
+                "Please set your Google API key to use Gemini:\n"
+                "export GOOGLE_API_KEY=your_key_here"
+            )
+        
+        model = config["gemini_quick_think_llm"]
+        valid_models = _get_valid_models("gemini")
+        
+        try:
+            gemini_model = ChatGoogleGenerativeAI(
+                model=model,
+                temperature=1,
+                max_tokens=4096,
+                google_api_key=api_key
+            )
+            response = gemini_model.invoke(prompt)
+            return response.content
+            
+        except NotFound as e:
+            error_msg = (
+                f"❌ Invalid Gemini model: '{model}'\n"
+                f"Valid Gemini models are:\n"
+                + "\n".join(f"  • {m}" for m in valid_models) +
+                f"\n\nPlease update your configuration in default_config.py:\n"
+                f"  'gemini_quick_think_llm': 'gemini-1.5-flash'  # or another valid model"
+            )
+            raise ValueError(error_msg) from e
+            
+        except ResourceExhausted as e:
+            error_msg = (
+                f"❌ Gemini API quota exceeded for model '{model}'\n"
+                f"You have hit your usage limits for the Gemini API.\n"
+                f"Options:\n"
+                f"  • Wait for quota to reset (check: https://ai.google.dev/gemini-api/docs/rate-limits)\n"
+                f"  • Upgrade your Gemini API plan\n"
+                f"  • Switch to OpenAI by setting: 'llm_provider': 'openai' in default_config.py\n"
+                f"  • Use offline tools by setting: 'online_tools': False in default_config.py"
+            )
+            raise ValueError(error_msg) from e
+            
+        except Exception as e:
+            # Catch any other Gemini API errors
+            error_str = str(e).lower()
+            if "connection" in error_str or "network" in error_str:
+                error_msg = (
+                    f"❌ Gemini API connection failed\n"
+                    f"Unable to connect to Google's Gemini API\n"
+                    f"This could be due to:\n"
+                    f"  • Network connectivity issues\n"
+                    f"  • Invalid API key\n"
+                    f"  • Firewall blocking the connection\n"
+                    f"  • Google AI service temporarily unavailable\n"
+                    f"\nAlternatives:\n"
+                    f"  • Switch to OpenAI: 'llm_provider': 'openai' in default_config.py\n"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                )
+                raise ValueError(error_msg) from e
+            elif "authentication" in error_str or "api key" in error_str:
+                error_msg = (
+                    f"❌ Gemini API authentication failed\n"
+                    f"Your Google API key appears to be invalid or expired.\n"
+                    f"Please check your GOOGLE_API_KEY environment variable.\n"
+                    f"Get a valid key from: https://aistudio.google.com/app/apikey"
+                )
+                raise ValueError(error_msg) from e
+            else:
+                # Re-raise other unexpected errors with provider context
+                error_msg = (
+                    f"❌ Gemini API error with model '{model}'\n"
+                    f"Error: {str(e)}\n"
+                    f"Valid models: {', '.join(valid_models[:5])}...\n"
+                    f"\nAlternatives:\n"
+                    f"  • Switch to OpenAI: 'llm_provider': 'openai' in default_config.py\n"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                )
+                raise ValueError(error_msg) from e
+            
+    else:
+        # Use OpenAI (default)
+        import os
+        from openai import OpenAI, AuthenticationError, RateLimitError, NotFoundError
+        
+        # Check if API key is available
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "❌ OPENAI_API_KEY environment variable is not set.\n"
+                "Please set your OpenAI API key:\n"
+                "export OPENAI_API_KEY=your_key_here"
+            )
+        
+        model = config["quick_think_llm"]
+        valid_models = _get_valid_models("openai")
+        
+        try:
+            client = OpenAI(base_url=config["backend_url"])
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
                     {
-                        "type": "input_text",
-                        "text": f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period.",
+                        "role": "system",
+                        "content": prompt,
                     }
                 ],
-            }
-        ],
-        text={"format": {"type": "text"}},
-        reasoning={},
-        tools=[
-            {
-                "type": "web_search_preview",
-                "user_location": {"type": "approximate"},
-                "search_context_size": "low",
-            }
-        ],
-        temperature=1,
-        max_output_tokens=4096,
-        top_p=1,
-        store=True,
-    )
+                temperature=1,
+                max_tokens=4096,
+                top_p=1,
+            )
+            return response.choices[0].message.content
+            
+        except NotFoundError as e:
+            error_msg = (
+                f"❌ Invalid OpenAI model: '{model}'\n"
+                f"Valid OpenAI models are:\n"
+                + "\n".join(f"  • {m}" for m in valid_models) +
+                f"\n\nPlease update your configuration in default_config.py:\n"
+                f"  'quick_think_llm': 'gpt-4o-mini'  # or another valid model"
+            )
+            raise ValueError(error_msg) from e
+            
+        except RateLimitError as e:
+            error_msg = (
+                f"❌ OpenAI API quota exceeded for model '{model}'\n"
+                f"You have hit your usage limits for the OpenAI API.\n"
+                f"Options:\n"
+                f"  • Check your billing and add credits: https://platform.openai.com/account/billing\n"
+                f"  • Wait for quota to reset\n"
+                f"  • Switch to Gemini by setting: 'llm_provider': 'gemini' in default_config.py\n"
+                f"  • Use offline tools by setting: 'online_tools': False in default_config.py"
+            )
+            raise ValueError(error_msg) from e
+            
+        except AuthenticationError as e:
+            error_msg = (
+                f"❌ OpenAI API authentication failed\n"
+                f"Your API key appears to be invalid or expired.\n"
+                f"Please check your OPENAI_API_KEY environment variable.\n"
+                f"Get a valid key from: https://platform.openai.com/api-keys"
+            )
+            raise ValueError(error_msg) from e
+            
+        except Exception as e:
+            # Catch any other OpenAI API errors (connection, etc.)
+            error_str = str(e).lower()
+            if "connection" in error_str:
+                error_msg = (
+                    f"❌ OpenAI API connection failed\n"
+                    f"Unable to connect to OpenAI API at {config['backend_url']}\n"
+                    f"This could be due to:\n"
+                    f"  • Network connectivity issues\n"
+                    f"  • Invalid backend URL\n"
+                    f"  • Firewall blocking the connection\n"
+                    f"  • OpenAI service temporarily unavailable\n"
+                    f"\nAlternatives:\n"
+                    f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                )
+                raise ValueError(error_msg) from e
+            elif "quota" in error_str or "rate limit" in error_str or "429" in error_str:
+                error_msg = (
+                    f"❌ OpenAI API quota/rate limit exceeded\n"
+                    f"You have hit your usage limits for the OpenAI API.\n"
+                    f"Options:\n"
+                    f"  • Check billing: https://platform.openai.com/account/billing\n"
+                    f"  • Wait for quota to reset\n"
+                    f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                )
+                raise ValueError(error_msg) from e
+            else:
+                # Re-raise other unexpected errors with provider context
+                error_msg = (
+                    f"❌ OpenAI API error with model '{model}'\n"
+                    f"Error: {str(e)}\n"
+                    f"Valid models: {', '.join(valid_models[:5])}...\n"
+                    f"\nAlternatives:\n"
+                    f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                )
+                raise ValueError(error_msg) from e
 
-    return response.output[1].content[0].text
+
+def get_stock_news_openai(ticker, curr_date):
+    config = get_config()
+    prompt = f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period."
+    return _call_llm_api(prompt, config)
 
 
 def get_global_news_openai(curr_date):
     config = get_config()
-    client = OpenAI(base_url=config["backend_url"])
-
-    response = client.responses.create(
-        model=config["quick_think_llm"],
-        input=[
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": f"Can you search global or macroeconomics news from 7 days before {curr_date} to {curr_date} that would be informative for trading purposes? Make sure you only get the data posted during that period.",
-                    }
-                ],
-            }
-        ],
-        text={"format": {"type": "text"}},
-        reasoning={},
-        tools=[
-            {
-                "type": "web_search_preview",
-                "user_location": {"type": "approximate"},
-                "search_context_size": "low",
-            }
-        ],
-        temperature=1,
-        max_output_tokens=4096,
-        top_p=1,
-        store=True,
-    )
-
-    return response.output[1].content[0].text
+    prompt = f"Can you search global or macroeconomics news from 7 days before {curr_date} to {curr_date} that would be informative for trading purposes? Make sure you only get the data posted during that period."
+    return _call_llm_api(prompt, config)
 
 
 def get_fundamentals_openai(ticker, curr_date):
     config = get_config()
-    client = OpenAI(base_url=config["backend_url"])
-
-    response = client.responses.create(
-        model=config["quick_think_llm"],
-        input=[
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": f"Can you search Fundamental for discussions on {ticker} during of the month before {curr_date} to the month of {curr_date}. Make sure you only get the data posted during that period. List as a table, with PE/PS/Cash flow/ etc",
-                    }
-                ],
-            }
-        ],
-        text={"format": {"type": "text"}},
-        reasoning={},
-        tools=[
-            {
-                "type": "web_search_preview",
-                "user_location": {"type": "approximate"},
-                "search_context_size": "low",
-            }
-        ],
-        temperature=1,
-        max_output_tokens=4096,
-        top_p=1,
-        store=True,
-    )
-
-    return response.output[1].content[0].text
+    prompt = f"Can you search for fundamental analysis discussions on {ticker} during the month before {curr_date} to the month of {curr_date}. Make sure you only get the data posted during that period. List as a table, with PE/PS/Cash flow/ etc"
+    return _call_llm_api(prompt, config)

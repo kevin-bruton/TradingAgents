@@ -368,7 +368,7 @@ class Toolkit:
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
         """
-        Retrieve the latest news about a given stock by using OpenAI's news API.
+        Retrieve the latest news about a given stock by using LLM API (OpenAI/Gemini).
         Args:
             ticker (str): Ticker of a company. e.g. AAPL, TSM
             curr_date (str): Current date in yyyy-mm-dd format
@@ -376,9 +376,12 @@ class Toolkit:
             str: A formatted string containing the latest news about the company on the given date.
         """
 
-        openai_news_results = interface.get_stock_news_openai(ticker, curr_date)
-
-        return openai_news_results
+        try:
+            openai_news_results = interface.get_stock_news_openai(ticker, curr_date)
+            return openai_news_results
+        except ValueError as e:
+            # Return the detailed error message to the agent
+            return f"⚠️ Online news tool failed:\n{str(e)}\n\nPlease use alternative offline tools or fix the configuration."
 
     @staticmethod
     @tool
@@ -386,16 +389,19 @@ class Toolkit:
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
         """
-        Retrieve the latest macroeconomics news on a given date using OpenAI's macroeconomics news API.
+        Retrieve the latest macroeconomics news on a given date using LLM API (OpenAI/Gemini).
         Args:
             curr_date (str): Current date in yyyy-mm-dd format
         Returns:
             str: A formatted string containing the latest macroeconomic news on the given date.
         """
 
-        openai_news_results = interface.get_global_news_openai(curr_date)
-
-        return openai_news_results
+        try:
+            openai_news_results = interface.get_global_news_openai(curr_date)
+            return openai_news_results
+        except ValueError as e:
+            # Return the detailed error message to the agent
+            return f"⚠️ Online global news tool failed:\n{str(e)}\n\nPlease use alternative offline tools or fix the configuration."
 
     @staticmethod
     @tool
@@ -404,7 +410,7 @@ class Toolkit:
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
         """
-        Retrieve the latest fundamental information about a given stock on a given date by using OpenAI's news API.
+        Retrieve the latest fundamental information about a given stock on a given date by using LLM API (OpenAI/Gemini).
         Args:
             ticker (str): Ticker of a company. e.g. AAPL, TSM
             curr_date (str): Current date in yyyy-mm-dd format
@@ -412,8 +418,11 @@ class Toolkit:
             str: A formatted string containing the latest fundamental information about the company on the given date.
         """
 
-        openai_fundamentals_results = interface.get_fundamentals_openai(
-            ticker, curr_date
-        )
-
-        return openai_fundamentals_results
+        try:
+            openai_fundamentals_results = interface.get_fundamentals_openai(
+                ticker, curr_date
+            )
+            return openai_fundamentals_results
+        except ValueError as e:
+            # Return the detailed error message to the agent
+            return f"⚠️ Online fundamentals tool failed:\n{str(e)}\n\nPlease use alternative offline tools or fix the configuration."
