@@ -16,6 +16,8 @@ DEFAULT_CONFIG = {
     # Gemini settings (used when llm_provider is "gemini")
     "gemini_deep_think_llm": "gemini-1.5-pro",
     "gemini_quick_think_llm": "gemini-1.5-flash",
+    # Memory settings
+    "use_local_embeddings": True,  # Use local embeddings instead of API calls
     # Debate and discussion settings
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
