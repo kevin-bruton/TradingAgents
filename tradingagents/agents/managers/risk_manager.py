@@ -22,16 +22,24 @@ def create_risk_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and determine the best course of action for the trader. Your decision must result in a clear recommendation: Buy, Sell, or Hold. Choose Hold only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness.
+        user_position = state.get("user_position", "none")
+
+        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and determine the best course of action for the trader. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+
+Your decision must result in a clear recommendation. Choose a neutral stance only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness.
 
 Guidelines for Decision-Making:
 1. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.
 2. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
 3. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
-4. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong BUY/SELL/HOLD call that loses money.
+4. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong decision that loses money.
 
 Deliverables:
-- A clear and actionable recommendation: Buy, Sell, or Hold.
+- A clear and actionable recommendation.
 - Detailed reasoning anchored in the debate and past reflections.
 
 ---

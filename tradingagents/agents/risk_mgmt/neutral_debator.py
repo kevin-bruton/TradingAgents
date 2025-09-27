@@ -18,7 +18,15 @@ def create_neutral_debator(llm):
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
+        user_position = state.get("user_position", "none")
+
+        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+
+You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
 
 {trader_decision}
 

@@ -393,6 +393,11 @@ def update_display(layout, spinner_text=None):
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
 
 
+def get_user_position():
+    """Get user's current position from user input."""
+    return typer.prompt("What is your current position on this ticker? (long, short, none)", default="none")
+
+
 def get_user_selections():
     """Get all user selections before starting the analysis display."""
     # Display ASCII art welcome message
@@ -435,21 +440,29 @@ def get_user_selections():
     )
     selected_ticker = get_ticker()
 
-    # Step 2: Analysis date
+    # Step 2: User position
+    console.print(
+        create_question_box(
+            "Step 2: User Position", "Enter your current position on this ticker", "none"
+        )
+    )
+    selected_position = get_user_position()
+
+    # Step 3: Analysis date
     default_date = datetime.datetime.now().strftime("%Y-%m-%d")
     console.print(
         create_question_box(
-            "Step 2: Analysis Date",
+            "Step 3: Analysis Date",
             "Enter the analysis date (YYYY-MM-DD)",
             default_date,
         )
     )
     analysis_date = get_analysis_date()
 
-    # Step 3: Select analysts
+    # Step 4: Select analysts
     console.print(
         create_question_box(
-            "Step 3: Analysts Team", "Select your LLM analyst agents for the analysis"
+            "Step 4: Analysts Team", "Select your LLM analyst agents for the analysis"
         )
     )
     selected_analysts = select_analysts()
@@ -457,26 +470,26 @@ def get_user_selections():
         f"[green]Selected analysts:[/green] {', '.join(analyst.value for analyst in selected_analysts)}"
     )
 
-    # Step 4: Research depth
+    # Step 5: Research depth
     console.print(
         create_question_box(
-            "Step 4: Research Depth", "Select your research depth level"
+            "Step 5: Research Depth", "Select your research depth level"
         )
     )
     selected_research_depth = select_research_depth()
 
-    # Step 5: LLM Provider
+    # Step 6: LLM Provider
     console.print(
         create_question_box(
-            "Step 5: LLM Provider", "Select which service to talk to"
+            "Step 6: LLM Provider", "Select which service to talk to"
         )
     )
     selected_llm_provider, backend_url = select_llm_provider()
     
-    # Step 6: Thinking agents
+    # Step 7: Thinking agents
     console.print(
         create_question_box(
-            "Step 6: Thinking Agents", "Select your thinking agents for analysis"
+            "Step 7: Thinking Agents", "Select your thinking agents for analysis"
         )
     )
     selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
@@ -484,6 +497,7 @@ def get_user_selections():
 
     return {
         "ticker": selected_ticker,
+        "user_position": selected_position,
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
@@ -521,6 +535,10 @@ def get_analysis_date():
 def display_complete_report(final_state):
     """Display the complete analysis report with team-based panels."""
     console.print("\n[bold green]Complete Analysis Report[/bold green]\n")
+
+    # User Position
+    user_position = final_state.get("user_position", "none")
+    console.print(Panel(f"User's current position: [bold]{user_position}[/bold]", title="User Position", border_style="yellow", padding=(1, 2)))
 
     # I. Analyst Team Reports
     analyst_reports = []
@@ -745,6 +763,7 @@ def run_analysis():
     config["deep_think_llm"] = selections["deep_thinker"]
     config["backend_url"] = selections["backend_url"]
     config["llm_provider"] = selections["llm_provider"].lower()
+    config["user_position"] = selections["user_position"]
 
     # Initialize the graph
     graph = TradingAgentsGraph(
@@ -839,7 +858,7 @@ def run_analysis():
 
         # Initialize state and get graph args
         init_agent_state = graph.propagator.create_initial_state(
-            selections["ticker"], selections["analysis_date"]
+            selections["ticker"], selections["analysis_date"], selections["user_position"]
         )
         args = graph.propagator.get_graph_args()
 

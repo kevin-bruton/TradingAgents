@@ -18,7 +18,15 @@ def create_risky_debator(llm):
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Risky Risk Analyst, your role is to actively champion high-reward, high-risk opportunities, emphasizing bold strategies and competitive advantages. When evaluating the trader's decision or plan, focus intently on the potential upside, growth potential, and innovative benefits—even when these come with elevated risk. Use the provided market data and sentiment analysis to strengthen your arguments and challenge the opposing views. Specifically, respond directly to each point made by the conservative and neutral analysts, countering with data-driven rebuttals and persuasive reasoning. Highlight where their caution might miss critical opportunities or where their assumptions may be overly conservative. Here is the trader's decision:
+        user_position = state.get("user_position", "none")
+
+        prompt = f"""As the Risky Risk Analyst, your role is to actively champion high-reward, high-risk opportunities, emphasizing bold strategies and competitive advantages. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+
+When evaluating the trader's decision or plan, focus intently on the potential upside, growth potential, and innovative benefits—even when these come with elevated risk. Use the provided market data and sentiment analysis to strengthen your arguments and challenge the opposing views. Specifically, respond directly to each point made by the conservative and neutral analysts, countering with data-driven rebuttals and persuasive reasoning. Highlight where their caution might miss critical opportunities or where their assumptions may be overly conservative. Here is the trader's decision:
 
 {trader_decision}
 

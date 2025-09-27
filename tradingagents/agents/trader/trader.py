@@ -22,6 +22,8 @@ def create_trader(llm, memory):
         else:
             past_memory_str = "No past memories found."
 
+        user_position = state.get("user_position", "none")
+
         context = {
             "role": "user",
             "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
@@ -30,7 +32,13 @@ def create_trader(llm, memory):
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trading agent analyzing market data to make investment decisions. Based on your analysis, provide a specific recommendation to buy, sell, or hold. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**' to confirm your recommendation. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
+                "content": f"""You are a trading agent analyzing market data to make investment decisions. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+
+Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
             },
             context,
         ]

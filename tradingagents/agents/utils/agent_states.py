@@ -48,6 +48,7 @@ class RiskDebateState(TypedDict):
 
 
 class AgentState(MessagesState):
+    user_position: Annotated[str, "User's current position on the ticker. Can be long, short or none"]
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
 

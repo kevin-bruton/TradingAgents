@@ -22,7 +22,15 @@ def create_bull_researcher(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""You are a Bull Analyst advocating for investing in the stock. Your task is to build a strong, evidence-based case emphasizing growth potential, competitive advantages, and positive market indicators. Leverage the provided research and data to address concerns and counter bearish arguments effectively.
+        user_position = state.get("user_position", "none")
+
+        prompt = f"""You are a Bull Analyst advocating for investing in the stock. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+
+Your task is to build a strong, evidence-based case emphasizing growth potential, competitive advantages, and positive market indicators. Leverage the provided research and data to address concerns and counter bearish arguments effectively.
 
 Key points to focus on:
 - Growth Potential: Highlight the company's market opportunities, revenue projections, and scalability.

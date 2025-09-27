@@ -19,13 +19,19 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+        user_position = state.get("user_position", "none")
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision. Your recommendation will depend on the user's current position on the ticker.
+
+- If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
+
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation must be clear and actionable. Avoid defaulting to a neutral stance simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 
-Your Recommendation: A decisive stance supported by the most convincing arguments.
+Your Recommendation: A decisive stance supported by the most convincing arguments, tailored to the user's position of '{user_position}'.
 Rationale: An explanation of why these arguments lead to your conclusion.
 Strategic Actions: Concrete steps for implementing the recommendation.
 Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 
