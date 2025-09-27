@@ -23,14 +23,16 @@ def create_bear_researcher(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         user_position = state.get("user_position", "none")
+        cost_per_trade = state.get("cost_per_trade", 0.0)
 
-        prompt = f"""You are a Bear Analyst making the case against investing in the stock. Your recommendation will depend on the user's current position on the ticker.
+        prompt = f"""You are a Bear Analyst making the case against investing in the stock. Your recommendation will depend on the user's current position on the ticker and the trading cost per operation.
 
-- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
-- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
-- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+- The user has a current position of '{user_position}' and the cost per trade is {cost_per_trade}.
+- If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
-Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
+Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost.
 
 Key points to focus on:
 

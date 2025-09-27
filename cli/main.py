@@ -393,6 +393,11 @@ def update_display(layout, spinner_text=None):
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
 
 
+def get_cost_per_trade():
+    """Get trading cost from user input."""
+    return typer.prompt("What is the trading cost per operation?", type=float, default=0.0)
+
+
 def get_user_position():
     """Get user's current position from user input."""
     return typer.prompt("What is your current position on this ticker? (long, short, none)", default="none")
@@ -448,21 +453,29 @@ def get_user_selections():
     )
     selected_position = get_user_position()
 
-    # Step 3: Analysis date
+    # Step 3: Trading cost
+    console.print(
+        create_question_box(
+            "Step 3: Trading Cost", "Enter the trading cost per operation", "0.0"
+        )
+    )
+    selected_cost_per_trade = get_cost_per_trade()
+
+    # Step 4: Analysis date
     default_date = datetime.datetime.now().strftime("%Y-%m-%d")
     console.print(
         create_question_box(
-            "Step 3: Analysis Date",
+            "Step 4: Analysis Date",
             "Enter the analysis date (YYYY-MM-DD)",
             default_date,
         )
     )
     analysis_date = get_analysis_date()
 
-    # Step 4: Select analysts
+    # Step 5: Select analysts
     console.print(
         create_question_box(
-            "Step 4: Analysts Team", "Select your LLM analyst agents for the analysis"
+            "Step 5: Analysts Team", "Select your LLM analyst agents for the analysis"
         )
     )
     selected_analysts = select_analysts()
@@ -470,26 +483,26 @@ def get_user_selections():
         f"[green]Selected analysts:[/green] {', '.join(analyst.value for analyst in selected_analysts)}"
     )
 
-    # Step 5: Research depth
+    # Step 6: Research depth
     console.print(
         create_question_box(
-            "Step 5: Research Depth", "Select your research depth level"
+            "Step 6: Research Depth", "Select your research depth level"
         )
     )
     selected_research_depth = select_research_depth()
 
-    # Step 6: LLM Provider
+    # Step 7: LLM Provider
     console.print(
         create_question_box(
-            "Step 6: LLM Provider", "Select which service to talk to"
+            "Step 7: LLM Provider", "Select which service to talk to"
         )
     )
     selected_llm_provider, backend_url = select_llm_provider()
     
-    # Step 7: Thinking agents
+    # Step 8: Thinking agents
     console.print(
         create_question_box(
-            "Step 7: Thinking Agents", "Select your thinking agents for analysis"
+            "Step 8: Thinking Agents", "Select your thinking agents for analysis"
         )
     )
     selected_shallow_thinker = select_shallow_thinking_agent(selected_llm_provider)
@@ -498,6 +511,7 @@ def get_user_selections():
     return {
         "ticker": selected_ticker,
         "user_position": selected_position,
+        "cost_per_trade": selected_cost_per_trade,
         "analysis_date": analysis_date,
         "analysts": selected_analysts,
         "research_depth": selected_research_depth,
@@ -538,7 +552,8 @@ def display_complete_report(final_state):
 
     # User Position
     user_position = final_state.get("user_position", "none")
-    console.print(Panel(f"User's current position: [bold]{user_position}[/bold]", title="User Position", border_style="yellow", padding=(1, 2)))
+    cost_per_trade = final_state.get("cost_per_trade", 0.0)
+    console.print(Panel(f"User's current position: [bold]{user_position}[/bold]\nTrading cost per operation: [bold]{cost_per_trade}[/bold]", title="User Information", border_style="yellow", padding=(1, 2)))
 
     # I. Analyst Team Reports
     analyst_reports = []
@@ -764,6 +779,7 @@ def run_analysis():
     config["backend_url"] = selections["backend_url"]
     config["llm_provider"] = selections["llm_provider"].lower()
     config["user_position"] = selections["user_position"]
+    config["cost_per_trade"] = selections["cost_per_trade"]
 
     # Initialize the graph
     graph = TradingAgentsGraph(
@@ -858,7 +874,7 @@ def run_analysis():
 
         # Initialize state and get graph args
         init_agent_state = graph.propagator.create_initial_state(
-            selections["ticker"], selections["analysis_date"], selections["user_position"]
+            selections["ticker"], selections["analysis_date"], selections["user_position"], selections["cost_per_trade"]
         )
         args = graph.propagator.get_graph_args()
 

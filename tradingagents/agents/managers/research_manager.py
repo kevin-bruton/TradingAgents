@@ -20,18 +20,20 @@ def create_research_manager(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         user_position = state.get("user_position", "none")
+        cost_per_trade = state.get("cost_per_trade", 0.0)
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision. Your recommendation will depend on the user's current position on the ticker.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision. Your recommendation will depend on the user's current position on the ticker and the trading cost per operation.
 
+- The user has a current position of '{user_position}' and the cost per trade is {cost_per_trade}.
 - If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
 - If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
 - If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation must be clear and actionable. Avoid defaulting to a neutral stance simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation must be clear and actionable. Avoid defaulting to a neutral stance simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost.
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 
-Your Recommendation: A decisive stance supported by the most convincing arguments, tailored to the user's position of '{user_position}'.
+Your Recommendation: A decisive stance supported by the most convincing arguments, tailored to the user's position of '{user_position}' and the trading cost of {cost_per_trade}.
 Rationale: An explanation of why these arguments lead to your conclusion.
 Strategic Actions: Concrete steps for implementing the recommendation.
 Take into account your past mistakes on similar situations. Use these insights to refine your decision-making and ensure you are learning and improving. Present your analysis conversationally, as if speaking naturally, without special formatting. 

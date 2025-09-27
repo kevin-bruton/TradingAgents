@@ -23,6 +23,7 @@ def create_trader(llm, memory):
             past_memory_str = "No past memories found."
 
         user_position = state.get("user_position", "none")
+        cost_per_trade = state.get("cost_per_trade", 0.0)
 
         context = {
             "role": "user",
@@ -32,13 +33,14 @@ def create_trader(llm, memory):
         messages = [
             {
                 "role": "system",
-                "content": f"""You are a trading agent analyzing market data to make investment decisions. Your recommendation will depend on the user's current position on the ticker.
+                "content": f"""You are a trading agent analyzing market data to make investment decisions. Your recommendation will depend on the user's current position on the ticker and the trading cost per operation.
 
-- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
-- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
-- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+- The user has a current position of '{user_position}' and the cost per trade is {cost_per_trade}.
+- If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
-Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
+Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
             },
             context,
         ]

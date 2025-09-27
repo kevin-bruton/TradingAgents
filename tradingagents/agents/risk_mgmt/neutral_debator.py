@@ -19,18 +19,20 @@ def create_neutral_debator(llm):
         trader_decision = state["trader_investment_plan"]
 
         user_position = state.get("user_position", "none")
+        cost_per_trade = state.get("cost_per_trade", 0.0)
 
-        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. Your recommendation will depend on the user's current position on the ticker.
+        prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. Your recommendation will depend on the user's current position on the ticker and the trading cost per operation.
 
-- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
-- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
-- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+- The user has a current position of '{user_position}' and the cost per trade is {cost_per_trade}.
+- If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
 You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
 
 {trader_decision}
 
-Your task is to challenge both the Risky and Safe Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
+Your task is to challenge both the Risky and Safe Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision: Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost.
 
 Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}

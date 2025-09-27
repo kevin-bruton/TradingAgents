@@ -23,14 +23,16 @@ def create_risk_manager(llm, memory):
             past_memory_str += rec["recommendation"] + "\n\n"
 
         user_position = state.get("user_position", "none")
+        cost_per_trade = state.get("cost_per_trade", 0.0)
 
-        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and determine the best course of action for the trader. Your recommendation will depend on the user's current position on the ticker.
+        prompt = f"""As the Risk Management Judge and Debate Facilitator, your goal is to evaluate the debate between three risk analysts—Risky, Neutral, and Safe/Conservative—and determine the best course of action for the trader. Your recommendation will depend on the user's current position on the ticker and the trading cost per operation.
 
-- If the user has an open long position (user's position is '{user_position}'), your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
-- If the user has an open short position (user's position is '{user_position}'), your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
-- If the user has no open position (user's position is '{user_position}'), your recommendation can be to do nothing, open a long position, or open a short position.
+- The user has a current position of '{user_position}' and the cost per trade is {cost_per_trade}.
+- If the user has an open long position, your recommendation can be to maintain the long position, close the long position, or close the long position and open a short position.
+- If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
+- If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
-Your decision must result in a clear recommendation. Choose a neutral stance only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness.
+Your decision must result in a clear recommendation. Choose a neutral stance only if strongly justified by specific arguments, not as a fallback when all sides seem valid. Strive for clarity and decisiveness. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost.
 
 Guidelines for Decision-Making:
 1. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.

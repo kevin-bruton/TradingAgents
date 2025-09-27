@@ -25,4 +25,5 @@ DEFAULT_CONFIG = {
     # Tool settings
     "online_tools": True,
     "user_position": "none",
+    "cost_per_trade": 0.0,
 }
