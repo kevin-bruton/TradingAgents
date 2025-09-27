@@ -14,7 +14,7 @@ class FinancialSituationMemory:
                 # Use a good general-purpose model for financial text
                 self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
                 self.embedding_type = "local"
-                print(f"✅ Using local embeddings with sentence-transformers")
+                print(f"✅ Using local embeddings with sentence-transformers for {name}")
             except ImportError:
                 print("⚠️  sentence-transformers not found. Install with: pip install sentence-transformers")
                 print("Falling back to ChromaDB's default embeddings...")

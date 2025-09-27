@@ -363,7 +363,7 @@ class Toolkit:
 
     @staticmethod
     @tool
-    def get_stock_news_openai(
+    def get_stock_news_from_llm(
         ticker: Annotated[str, "the company's ticker"],
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
@@ -377,7 +377,7 @@ class Toolkit:
         """
 
         try:
-            openai_news_results = interface.get_stock_news_openai(ticker, curr_date)
+            openai_news_results = interface.get_stock_news_from_llm(ticker, curr_date)
             return openai_news_results
         except ValueError as e:
             # Return the detailed error message to the agent
@@ -385,7 +385,7 @@ class Toolkit:
 
     @staticmethod
     @tool
-    def get_global_news_openai(
+    def get_global_news_from_llm(
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
         """
@@ -397,7 +397,7 @@ class Toolkit:
         """
 
         try:
-            openai_news_results = interface.get_global_news_openai(curr_date)
+            openai_news_results = interface.get_global_news_from_llm(curr_date)
             return openai_news_results
         except ValueError as e:
             # Return the detailed error message to the agent
@@ -405,7 +405,7 @@ class Toolkit:
 
     @staticmethod
     @tool
-    def get_fundamentals_openai(
+    def get_fundamentals_from_llm(
         ticker: Annotated[str, "the company's ticker"],
         curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
     ):
@@ -419,7 +419,7 @@ class Toolkit:
         """
 
         try:
-            openai_fundamentals_results = interface.get_fundamentals_openai(
+            openai_fundamentals_results = interface.get_fundamentals_from_llm(
                 ticker, curr_date
             )
             return openai_fundamentals_results

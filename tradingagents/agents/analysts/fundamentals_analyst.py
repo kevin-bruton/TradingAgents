@@ -10,7 +10,7 @@ def create_fundamentals_analyst(llm, toolkit):
         company_name = state["company_of_interest"]
 
         if toolkit.config["online_tools"]:
-            tools = [toolkit.get_fundamentals_openai]
+            tools = [toolkit.get_fundamentals_from_llm]
         else:
             tools = [
                 toolkit.get_finnhub_company_insider_sentiment,

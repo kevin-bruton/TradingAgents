@@ -932,19 +932,19 @@ def _call_llm_api(prompt, config):
                 raise ValueError(error_msg) from e
 
 
-def get_stock_news_openai(ticker, curr_date):
+def get_stock_news_from_llm(ticker, curr_date):
     config = get_config()
     prompt = f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period."
     return _call_llm_api(prompt, config)
 
 
-def get_global_news_openai(curr_date):
+def get_global_news_from_llm(curr_date):
     config = get_config()
     prompt = f"Can you search global or macroeconomics news from 7 days before {curr_date} to {curr_date} that would be informative for trading purposes? Make sure you only get the data posted during that period."
     return _call_llm_api(prompt, config)
 
 
-def get_fundamentals_openai(ticker, curr_date):
+def get_fundamentals_from_llm(ticker, curr_date):
     config = get_config()
     prompt = f"Can you search for fundamental analysis discussions on {ticker} during the month before {curr_date} to the month of {curr_date}. Make sure you only get the data posted during that period. List as a table, with PE/PS/Cash flow/ etc"
     return _call_llm_api(prompt, config)
