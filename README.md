@@ -197,6 +197,25 @@ print(decision)
 
 You can view the full list of configurations in `tradingagents/default_config.py`.
 
+## Persistent Memory and Learning
+
+To allow the agents to learn from the success or failure of previous decisions, TradingAgents includes a persistent memory mechanism.
+
+Each agent's reflections and the "lessons learned" from past trading sessions are stored on disk. This allows the system to build a rich, searchable history of its actions and their consequences, enabling more informed decisions in the future.
+
+- **Storage**: The memory is managed by the `FinancialSituationMemory` class in `tradingagents/agents/utils/memory.py` and is persisted to the `./memory_store/` directory using a local ChromaDB database.
+- **Learning Loop**: After a trade, a `Reflector` agent analyzes the outcome (profit or loss) and generates a "lesson." This lesson is stored in the memory, linked to the market conditions at the time. Before the next trade, agents query this memory for similar past situations to retrieve relevant lessons, which are then used to inform their decision-making process.
+
+### Inspecting the Memory
+
+You can inspect the contents of the persistent memory to see what the agents have learned. To do this, run the memory utility script from the root of the project:
+
+```bash
+python -m tradingagents.agents.utils.memory
+```
+
+The first time you run this, it will populate the memory with example data. Subsequent runs will load and display the data from the `memory_store` directory, demonstrating that the memory persists across sessions.
+
 ## Contributing
 
 We welcome contributions from the community! Whether it's fixing a bug, improving documentation, or suggesting a new feature, your input helps make this project better. If you are interested in this line of research, please consider joining our open-source financial AI research community [Tauric Research](https://tauric.ai/).

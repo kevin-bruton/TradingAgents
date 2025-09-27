@@ -40,7 +40,8 @@ def create_trader(llm, memory):
 - If the user has an open short position, your recommendation can be to maintain the short position, close the short position, or close the short position and open a long position.
 - If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
-Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situatiosn you traded in and the lessons learned: {past_memory_str}""",
+Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situations you traded in and the lessons learned: {past_memory_str}
+Your output should always be in markdown format.""",
             },
             context,
         ]

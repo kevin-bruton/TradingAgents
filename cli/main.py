@@ -73,6 +73,10 @@ class MessageBuffer:
             "final_trade_decision": None,
         }
 
+    def _format_report_content(self, content):
+        """Ensures content is a string."""
+        return str(content)
+
     def add_message(self, message_type, content):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         self.messages.append((timestamp, message_type, content))
@@ -100,7 +104,7 @@ class MessageBuffer:
         for section, content in self.report_sections.items():
             if content is not None:
                 latest_section = section
-                latest_content = content
+                latest_content = self._format_report_content(content)
                
         if latest_section and latest_content:
             # Format the current section for display
@@ -136,35 +140,35 @@ class MessageBuffer:
             report_parts.append("## Analyst Team Reports")
             if self.report_sections["market_report"]:
                 report_parts.append(
-                    f"### Market Analysis\n{self.report_sections['market_report']}"
+                    f"### Market Analysis\n{self._format_report_content(self.report_sections['market_report'])}"
                 )
             if self.report_sections["sentiment_report"]:
                 report_parts.append(
-                    f"### Social Sentiment\n{self.report_sections['sentiment_report']}"
+                    f"### Social Sentiment\n{self._format_report_content(self.report_sections['sentiment_report'])}"
                 )
             if self.report_sections["news_report"]:
                 report_parts.append(
-                    f"### News Analysis\n{self.report_sections['news_report']}"
+                    f"### News Analysis\n{self._format_report_content(self.report_sections['news_report'])}"
                 )
             if self.report_sections["fundamentals_report"]:
                 report_parts.append(
-                    f"### Fundamentals Analysis\n{self.report_sections['fundamentals_report']}"
+                    f"### Fundamentals Analysis\n{self._format_report_content(self.report_sections['fundamentals_report'])}"
                 )
 
         # Research Team Reports
         if self.report_sections["investment_plan"]:
             report_parts.append("## Research Team Decision")
-            report_parts.append(f"{self.report_sections['investment_plan']}")
+            report_parts.append(f"{self._format_report_content(self.report_sections['investment_plan'])}")
 
         # Trading Team Reports
         if self.report_sections["trader_investment_plan"]:
             report_parts.append("## Trading Team Plan")
-            report_parts.append(f"{self.report_sections['trader_investment_plan']}")
+            report_parts.append(f"{self._format_report_content(self.report_sections['trader_investment_plan'])}")
 
         # Portfolio Management Decision
         if self.report_sections["final_trade_decision"]:
             report_parts.append("## Portfolio Management Decision")
-            report_parts.append(f"{self.report_sections['final_trade_decision']}")
+            report_parts.append(f"{self._format_report_content(self.report_sections['final_trade_decision'])}")
 
         self.final_report = "\n\n".join(report_parts) if report_parts else None
 
@@ -550,6 +554,10 @@ def display_complete_report(final_state):
     """Display the complete analysis report with team-based panels."""
     console.print("\n[bold green]Complete Analysis Report[/bold green]\n")
 
+    def _format_content_for_markdown(content):
+        """Ensures content is a string."""
+        return str(content)
+
     # User Position
     user_position = final_state.get("user_position", "none")
     cost_per_trade = final_state.get("cost_per_trade", 0.0)
@@ -562,7 +570,7 @@ def display_complete_report(final_state):
     if final_state.get("market_report"):
         analyst_reports.append(
             Panel(
-                Markdown(final_state["market_report"]),
+                Markdown(_format_content_for_markdown(final_state["market_report"])),
                 title="Market Analyst",
                 border_style="blue",
                 padding=(1, 2),
@@ -573,7 +581,7 @@ def display_complete_report(final_state):
     if final_state.get("sentiment_report"):
         analyst_reports.append(
             Panel(
-                Markdown(final_state["sentiment_report"]),
+                Markdown(_format_content_for_markdown(final_state["sentiment_report"])),
                 title="Social Analyst",
                 border_style="blue",
                 padding=(1, 2),
@@ -584,7 +592,7 @@ def display_complete_report(final_state):
     if final_state.get("news_report"):
         analyst_reports.append(
             Panel(
-                Markdown(final_state["news_report"]),
+                Markdown(_format_content_for_markdown(final_state["news_report"])),
                 title="News Analyst",
                 border_style="blue",
                 padding=(1, 2),
@@ -595,7 +603,7 @@ def display_complete_report(final_state):
     if final_state.get("fundamentals_report"):
         analyst_reports.append(
             Panel(
-                Markdown(final_state["fundamentals_report"]),
+                Markdown(_format_content_for_markdown(final_state["fundamentals_report"])),
                 title="Fundamentals Analyst",
                 border_style="blue",
                 padding=(1, 2),
@@ -621,7 +629,7 @@ def display_complete_report(final_state):
         if debate_state.get("bull_history"):
             research_reports.append(
                 Panel(
-                    Markdown(debate_state["bull_history"]),
+                    Markdown(_format_content_for_markdown(debate_state["bull_history"])),
                     title="Bull Researcher",
                     border_style="blue",
                     padding=(1, 2),
@@ -632,7 +640,7 @@ def display_complete_report(final_state):
         if debate_state.get("bear_history"):
             research_reports.append(
                 Panel(
-                    Markdown(debate_state["bear_history"]),
+                    Markdown(_format_content_for_markdown(debate_state["bear_history"])),
                     title="Bear Researcher",
                     border_style="blue",
                     padding=(1, 2),
@@ -643,7 +651,7 @@ def display_complete_report(final_state):
         if debate_state.get("judge_decision"):
             research_reports.append(
                 Panel(
-                    Markdown(debate_state["judge_decision"]),
+                    Markdown(_format_content_for_markdown(debate_state["judge_decision"])),
                     title="Research Manager",
                     border_style="blue",
                     padding=(1, 2),
@@ -665,7 +673,7 @@ def display_complete_report(final_state):
         console.print(
             Panel(
                 Panel(
-                    Markdown(final_state["trader_investment_plan"]),
+                    Markdown(_format_content_for_markdown(final_state["trader_investment_plan"])),
                     title="Trader",
                     border_style="blue",
                     padding=(1, 2),
@@ -685,7 +693,7 @@ def display_complete_report(final_state):
         if risk_state.get("risky_history"):
             risk_reports.append(
                 Panel(
-                    Markdown(risk_state["risky_history"]),
+                    Markdown(_format_content_for_markdown(risk_state["risky_history"])),
                     title="Aggressive Analyst",
                     border_style="blue",
                     padding=(1, 2),
@@ -696,7 +704,7 @@ def display_complete_report(final_state):
         if risk_state.get("safe_history"):
             risk_reports.append(
                 Panel(
-                    Markdown(risk_state["safe_history"]),
+                    Markdown(_format_content_for_markdown(risk_state["safe_history"])),
                     title="Conservative Analyst",
                     border_style="blue",
                     padding=(1, 2),
@@ -707,7 +715,7 @@ def display_complete_report(final_state):
         if risk_state.get("neutral_history"):
             risk_reports.append(
                 Panel(
-                    Markdown(risk_state["neutral_history"]),
+                    Markdown(_format_content_for_markdown(risk_state["neutral_history"])),
                     title="Neutral Analyst",
                     border_style="blue",
                     padding=(1, 2),
@@ -729,7 +737,7 @@ def display_complete_report(final_state):
             console.print(
                 Panel(
                     Panel(
-                        Markdown(risk_state["judge_decision"]),
+                        Markdown(_format_content_for_markdown(risk_state["judge_decision"])),
                         title="Portfolio Manager",
                         border_style="blue",
                         padding=(1, 2),
@@ -826,7 +834,7 @@ def run_analysis():
                 if content:
                     file_name = f"{section_name}.md"
                     with open(report_dir / file_name, "w", encoding="utf-8") as f:
-                        f.write(content)
+                        f.write(str(content))
         return wrapper
 
     message_buffer.add_message = save_message_decorator(message_buffer, "add_message")
@@ -836,7 +844,7 @@ def run_analysis():
     # Now start the display layout
     layout = create_layout()
 
-    with Live(layout, refresh_per_second=4) as live:
+    with Live(layout, refresh_per_second=1) as live:
         # Initial display
         update_display(layout)
 

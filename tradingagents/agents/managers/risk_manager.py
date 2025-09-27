@@ -54,7 +54,8 @@ Deliverables:
 Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
 
         response = llm.invoke(prompt)
-
+        
+        final_decision_content = response.content
         new_risk_debate_state = {
             "judge_decision": response.content,
             "history": risk_debate_state["history"],
@@ -70,7 +71,7 @@ Focus on actionable insights and continuous improvement. Build on past lessons, 
 
         return {
             "risk_debate_state": new_risk_debate_state,
-            "final_trade_decision": response.content,
+            "final_trade_decision": final_decision_content,
         }
 
     return risk_manager_node

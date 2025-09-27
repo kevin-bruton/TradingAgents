@@ -1,10 +1,8 @@
 import chromadb
-from chromadb.config import Settings
 import os
 
-
 class FinancialSituationMemory:
-    def __init__(self, name, config):
+    def __init__(self, name, config, persist_directory="./memory_store"):
         # Use local embeddings for all providers - no external API dependency
         self.use_local_embeddings = config.get("use_local_embeddings", True)
         
@@ -40,18 +38,19 @@ class FinancialSituationMemory:
                     self.client = OpenAI(base_url=config["backend_url"], api_key=api_key)
             self.embedding_type = "api"
         
-        self.chroma_client = chromadb.Client(Settings(allow_reset=True))
+        self.chroma_client = chromadb.PersistentClient(path=persist_directory)
         
         # Create collection with or without custom embedding function
         if self.embedding_type == "chromadb_default":
             # Let ChromaDB handle embeddings with its default function
-            self.situation_collection = self.chroma_client.create_collection(name=name)
+            self.situation_collection = self.chroma_client.get_or_create_collection(name=name)
         else:
             # We'll handle embeddings ourselves
-            self.situation_collection = self.chroma_client.create_collection(
+            self.situation_collection = self.chroma_client.get_or_create_collection(
                 name=name,
                 metadata={"hnsw:space": "cosine"}  # Use cosine similarity
             )
+
 
     def get_embedding(self, text):
         """Get embedding for a text using local or API-based models"""
@@ -146,46 +145,80 @@ class FinancialSituationMemory:
 
 
 if __name__ == "__main__":
+    # Define the directory where memory will be stored
+    PERSIST_DIRECTORY = "./memory_store"
+    print(f"Memory will be persisted to: {os.path.abspath(PERSIST_DIRECTORY)}\n")
+
     # Example usage
-    matcher = FinancialSituationMemory()
+    config_example = {"use_local_embeddings": True, "backend_url": ""}
+    # Initialize memory with a name and the persistence directory
+    matcher = FinancialSituationMemory(
+        name="persistent_example_memory", 
+        config=config_example, 
+        persist_directory=PERSIST_DIRECTORY
+    )
 
-    # Example data
-    example_data = [
-        (
-            "High inflation rate with rising interest rates and declining consumer spending",
-            "Consider defensive sectors like consumer staples and utilities. Review fixed-income portfolio duration.",
-        ),
-        (
-            "Tech sector showing high volatility with increasing institutional selling pressure",
-            "Reduce exposure to high-growth tech stocks. Look for value opportunities in established tech companies with strong cash flows.",
-        ),
-        (
-            "Strong dollar affecting emerging markets with increasing forex volatility",
-            "Hedge currency exposure in international positions. Consider reducing allocation to emerging market debt.",
-        ),
-        (
-            "Market showing signs of sector rotation with rising yields",
-            "Rebalance portfolio to maintain target allocations. Consider increasing exposure to sectors benefiting from higher rates.",
-        ),
-    ]
+    # Check if memory is already populated
+    if matcher.situation_collection.count() == 0:
+        print("Memory is empty. Populating with example data...")
+        # Example data
+        example_data = [
+            (
+                "High inflation rate with rising interest rates and declining consumer spending",
+                "Consider defensive sectors like consumer staples and utilities. Review fixed-income portfolio duration.",
+            ),
+            (
+                "Tech sector showing high volatility with increasing institutional selling pressure",
+                "Reduce exposure to high-growth tech stocks. Look for value opportunities in established tech companies with strong cash flows.",
+            ),
+            (
+                "Strong dollar affecting emerging markets with increasing forex volatility",
+                "Hedge currency exposure in international positions. Consider reducing allocation to emerging market debt.",
+            ),
+            (
+                "Market showing signs of sector rotation with rising yields",
+                "Rebalance portfolio to maintain target allocations. Consider increasing exposure to sectors benefiting from higher rates.",
+            ),
+        ]
+        # Add the example situations and recommendations
+        matcher.add_situations(example_data)
+        print("Example data added to persistent memory.\n")
+    else:
+        print("Memory already contains data from a previous run.\n")
 
-    # Add the example situations and recommendations
-    matcher.add_situations(example_data)
+    # --- Inspecting the entire memory store ---
+    print("--- Dumping all contents of the memory store ---")
+    all_items = matcher.situation_collection.get(include=["metadatas", "documents"])
+    
+    if not all_items or not all_items.get("ids"):
+        print("Memory store is empty.")
+    else:
+        for i, item_id in enumerate(all_items["ids"]):
+            situation = all_items["documents"][i]
+            recommendation = all_items["metadatas"][i].get("recommendation", "N/A")
+            print(f"ID: {item_id}")
+            print(f"  Situation: {situation}")
+            print(f"  Recommendation/Lesson: {recommendation}\n")
+    print("--- End of memory dump ---")
 
-    # Example query
+    # Example query to show it still works
+    print("\n--- Running an example query ---")
     current_situation = """
     Market showing increased volatility in tech sector, with institutional investors 
     reducing positions and rising interest rates affecting growth stock valuations
     """
+    print(f"Querying for situation: {current_situation.strip()}\n")
 
     try:
-        recommendations = matcher.get_memories(current_situation, n_matches=2)
-
-        for i, rec in enumerate(recommendations, 1):
-            print(f"\nMatch {i}:")
-            print(f"Similarity Score: {rec['similarity_score']:.2f}")
-            print(f"Matched Situation: {rec['matched_situation']}")
-            print(f"Recommendation: {rec['recommendation']}")
+        recommendations = matcher.get_memories(current_situation, n_matches=1)
+        if recommendations:
+            rec = recommendations[0]
+            print(f"Most similar match found:")
+            print(f"  Similarity Score: {rec['similarity_score']:.2f}")
+            print(f"  Matched Situation: {rec['matched_situation']}")
+            print(f"  Retrieved Recommendation: {rec['recommendation']}\n")
+        else:
+            print("No similar situations found in memory.")
 
     except Exception as e:
         print(f"Error during recommendation: {str(e)}")
