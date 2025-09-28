@@ -1,3 +1,4 @@
+import os
 import questionary
 from typing import List, Optional, Tuple, Dict
 
@@ -147,11 +148,13 @@ def select_shallow_thinking_agent(provider) -> str:
         "openrouter": [
             ("xAI: Grok 4 Fast (free)", "x-ai/grok-4-fast:free"),
             ("DeepSeek: DeepSeek V3.1 (free)", "deepseek/deepseek-chat-v3.1:free"),
+            ("Z.AI: GLM 4 32B", "z-ai/glm-4-32b"),
             ("Meta: Llama 4 Scout", "meta-llama/llama-4-scout:free"),
             ("Meta: Llama 3.3 8B Instruct - A lightweight and ultra-fast variant of Llama 3.3 70B", "meta-llama/llama-3.3-8b-instruct:free"),
             ("google/gemini-2.0-flash-exp:free - Gemini Flash 2.0 offers a significantly faster time to first token", "google/gemini-2.0-flash-exp:free"),
         ],
         "ollama": [
+            ("Granite 3.3 2B", "granite3.3:2b"),
             ("llama3.1 local", "llama3.1"),
             ("llama3.2 local", "llama3.2"),
         ]
@@ -212,10 +215,12 @@ def select_deep_thinking_agent(provider) -> str:
         "openrouter": [
             ("Qwen: Qwen3 235B A22B (free)", "qwen/qwen3-235b-a22b:free"),
             ("OpenAI: gpt-oss-120b (free)", "openai/gpt-oss-120b:free"),
+            ("Z.AI: GLM 4 32B", "z-ai/glm-4-32b"),
             ("DeepSeek V3 - a 685B-parameter, mixture-of-experts model", "deepseek/deepseek-chat-v3-0324:free"),
             ("Deepseek - latest iteration of the flagship chat model family from the DeepSeek team.", "deepseek/deepseek-chat-v3-0324:free"),
         ],
         "ollama": [
+            ("Granite 3.3 2B", "granite3.3:2b"),
             ("llama3.1 local", "llama3.1"),
             ("qwen3", "qwen3"),
         ]
@@ -251,7 +256,7 @@ def select_llm_provider() -> tuple[str, str]:
         ("Anthropic", "https://api.anthropic.com/"),
         ("Google", "https://generativelanguage.googleapis.com/v1"),
         ("OpenRouter", "https://openrouter.ai/api/v1"),
-        ("Ollama", "http://localhost:11434/v1"),        
+        ("Ollama", f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/v1"),        
     ]
     
     choice = questionary.select(
