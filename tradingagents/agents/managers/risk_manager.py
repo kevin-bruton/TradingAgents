@@ -14,6 +14,8 @@ def create_risk_manager(llm, memory):
         fundamentals_report = state["news_report"]
         sentiment_report = state["sentiment_report"]
         trader_plan = state["investment_plan"]
+        stop_loss = state.get("stop_loss")
+        take_profit = state.get("take_profit")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -38,7 +40,8 @@ Guidelines for Decision-Making:
 1. **Summarize Key Arguments**: Extract the strongest points from each analyst, focusing on relevance to the context.
 2. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
 3. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
-4. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong decision that loses money.
+4. **Incorporate Technical Analysis**: The Trade Planner has proposed a stop-loss of **{stop_loss}** and a take-profit of **{take_profit}**. You must consider these levels in your final recommendation.
+5. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong decision that loses money.
 
 Deliverables:
 - A clear and actionable recommendation.

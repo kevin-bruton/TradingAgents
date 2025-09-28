@@ -98,6 +98,7 @@ class GraphSetup:
         research_manager_node = create_research_manager(
             self.deep_thinking_llm, self.invest_judge_memory
         )
+        trade_planner_node = create_trade_planner_agent(self.quick_thinking_llm, self.toolkit)
         trader_node = create_trader(self.quick_thinking_llm, self.trader_memory)
 
         # Create risk analysis nodes
@@ -123,6 +124,7 @@ class GraphSetup:
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
         workflow.add_node("Research Manager", research_manager_node)
+        workflow.add_node("Trade Planner", trade_planner_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Risky Analyst", risky_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
@@ -172,7 +174,8 @@ class GraphSetup:
                 "Research Manager": "Research Manager",
             },
         )
-        workflow.add_edge("Research Manager", "Trader")
+        workflow.add_edge("Research Manager", "Trade Planner")
+        workflow.add_edge("Trade Planner", "Trader")
         workflow.add_edge("Trader", "Risky Analyst")
         workflow.add_conditional_edges(
             "Risky Analyst",

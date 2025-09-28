@@ -180,6 +180,16 @@ class TradingAgentsGraph:
                     self.toolkit.get_simfin_income_stmt,
                 ]
             ),
+            "technical": ToolNode(
+                [
+                    # online tools
+                    self.toolkit.get_YFin_data_online,
+                    self.toolkit.get_stockstats_indicators_report_online,
+                    # offline tools
+                    self.toolkit.get_YFin_data,
+                    self.toolkit.get_stockstats_indicators_report,
+                ]
+            ),
         }
 
     def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0):
