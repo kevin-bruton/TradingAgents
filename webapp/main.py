@@ -266,18 +266,18 @@ def create_agent_node(agent_id: str, agent_name: str):
         "content": f"Agent: {agent_name} - Awaiting execution",
         "children": [
             {
-                "id": f"{agent_id}_report",
-                "name": "📄 Report",
-                "status": "pending",
-                "content": "Report not yet generated",
+                "id": f"{agent_id}_messages",
+                "name": "� Messages",
+                "status": "pending", 
+                "content": "No messages yet",
                 "children": [],
                 "timestamp": time.time()
             },
             {
-                "id": f"{agent_id}_messages",
-                "name": "💬 Messages",
-                "status": "pending", 
-                "content": "No messages yet",
+                "id": f"{agent_id}_report",
+                "name": "� Report",
+                "status": "pending",
+                "content": "Report not yet generated",
                 "children": [],
                 "timestamp": time.time()
             }
@@ -355,12 +355,54 @@ def format_report_content(report_name: str, report_data: any) -> str:
 
 def extract_agent_messages(state: dict, agent_id: str) -> str:
     """Extract relevant messages for an agent from the state."""
-    # This is a simplified version - could be enhanced to extract actual messages
-    messages = state.get("messages", [])
-    if messages:
-        return f"💬 Agent Messages\n\n{len(messages)} messages exchanged during execution"
-    else:
-        return "💬 Agent Messages\n\nExecution completed without specific message logs"
+    # Expecting state['messages'] to be a list of dicts with optional keys like
+    # 'role', 'content', 'timestamp'. We'll display each in an expandable box.
+    messages = state.get("messages", []) or []
+    if not messages:
+        return "💬 Agent Messages\n\nNo messages recorded for this agent."
+
+    # Filter messages for this agent if agent_id field present
+    filtered = []
+    for m in messages:
+        if isinstance(m, dict):
+            msg_agent = m.get("agent_id") or m.get("agent")
+            if msg_agent and msg_agent != agent_id:
+                continue
+            filtered.append(m)
+        else:
+            # Try common attributes used by message objects (e.g., langchain HumanMessage / AIMessage)
+            msg_agent = getattr(m, "agent_id", None) or getattr(m, "agent", None)
+            if msg_agent and msg_agent != agent_id:
+                continue
+            filtered.append(m)
+    if not filtered:
+        filtered = messages  # fallback to all if no agent-specific match
+
+    parts = ["💬 Agent Messages", "", f"Total messages: {len(filtered)}", ""]
+    for idx, m in enumerate(filtered, start=1):
+        if isinstance(m, dict):
+            role = m.get("role") or m.get("type") or "message"
+            ts = m.get("timestamp")
+            content = m.get("content") or m.get("text") or "(no content)"
+        else:
+            # Object-based message
+            role = getattr(m, "role", None) or getattr(m, "type", None) or m.__class__.__name__
+            ts = getattr(m, "timestamp", None)
+            # LangChain messages often have a .content attribute
+            content = getattr(m, "content", None) or getattr(m, "text", None) or str(m)
+        # Escape triple backticks to avoid markdown parser confusion
+        if isinstance(content, str):
+            content = content.replace('```', '\u0060\u0060\u0060')
+        header = f"{idx}. {role.title()}" + (f" – {ts}" if ts else "")
+        # Use HTML <details> so user can expand long messages
+        parts.append(
+            f"<details class=\"message-box\" {'open' if idx <= 3 else ''}>")
+        parts.append(f"  <summary>{header}</summary>")
+        # Wrap content in pre for formatting
+        parts.append("  <pre class=\"message-content\">" + str(content) + "</pre>")
+        parts.append("</details>")
+
+    return "\n".join(parts)
 
 def recalc_phase_statuses(execution_tree: list):
     """Recalculate each phase's status: pending (no started), in_progress (some running/completed but not all), completed (all done), error if any child error."""
