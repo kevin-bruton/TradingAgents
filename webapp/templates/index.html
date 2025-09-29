@@ -19,15 +19,17 @@
         <div id="left-panel">
             <h2>Configuration</h2>
             <div id="config-form">
-                <form hx-post="/start" hx-target="#left-panel" hx-swap="innerHTML">
+                <form hx-post="/start" hx-target="#left-panel" hx-swap="innerHTML" hx-indicator="#loading">
                     <label for="company_symbol">Company Symbol:</label>
                     <input type="text" id="company_symbol" name="company_symbol" value="AAPL" required>
                     <button type="submit">Start Process</button>
+                    <div id="loading" class="htmx-indicator">Starting process...</div>
                 </form>
             </div>
         </div>
         <div id="right-panel">
             <p>Welcome! Please set your configuration and start the process.</p>
+            <p>Enter a company symbol (e.g., AAPL, MSFT, GOOGL) and click "Start Process" to begin the trading analysis.</p>
         </div>
     </div>
 </body>

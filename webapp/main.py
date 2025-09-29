@@ -50,44 +50,103 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
 def update_execution_state(state: Dict[str, Any]):
     """Callback function to update the app_state based on LangGraph's state."""
     with app_state_lock:
-        current_step_name = None
-        # LangGraph state typically has a single key for the current node's output
-        # We need to find which agent just ran
-        for key, value in state.items():
-            if key != "__end__": # Ignore the special __end__ key
-                current_step_name = key
-                break
-
-        if current_step_name:
-            # Find the root node or create it if it doesn't exist
-            if not app_state["execution_tree"]:
-                app_state["execution_tree"].append({
-                    "id": "root",
-                    "name": f"Trading Analysis for {app_state['company_symbol']}",
-                    "status": "in_progress",
-                    "content": "",
-                    "children": [],
-                    "timestamp": time.time()
-                })
-            
-            root_node = app_state["execution_tree"][0]
-            
-            # Check if this step already exists (e.g., if an agent runs multiple times)
-            # For simplicity, we'll just append for now. A more robust solution would update existing.
-            new_item = {
-                "id": f"{current_step_name}-{len(root_node['children'])}", # Simple unique ID
-                "name": current_step_name,
-                "status": "completed", # Assume completed for now
-                "content": str(state.get(current_step_name, "No specific output")), # Store the agent's output
+        # Initialize the root node if it doesn't exist
+        if not app_state["execution_tree"]:
+            app_state["execution_tree"].append({
+                "id": "root",
+                "name": f"Trading Analysis for {app_state['company_symbol']}",
+                "status": "in_progress",
+                "content": f"Analyzing {app_state['company_symbol']} using multiple trading agents",
                 "children": [],
                 "timestamp": time.time()
-            }
-            root_node["children"].append(new_item)
-            root_node["status"] = "in_progress" # Keep root in progress until final
-            
-            # Update overall progress (very basic, just increments)
-            # In a real scenario, you'd have a predefined number of steps
-            app_state["overall_progress"] = min(100, app_state["overall_progress"] + 5)
+            })
+        
+        root_node = app_state["execution_tree"][0]
+        
+        # Define the expected phases and their order
+        phase_map = {
+            "market_analyst": {"name": "Market Analysis", "phase": "data_collection"},
+            "social_analyst": {"name": "Social Media Analysis", "phase": "data_collection"},
+            "news_analyst": {"name": "News Analysis", "phase": "data_collection"},
+            "fundamentals_analyst": {"name": "Fundamental Analysis", "phase": "data_collection"},
+            "bull_researcher": {"name": "Bull Case Research", "phase": "research"},
+            "bear_researcher": {"name": "Bear Case Research", "phase": "research"},
+            "research_manager": {"name": "Research Synthesis", "phase": "research"},
+            "trade_planner": {"name": "Trade Planning", "phase": "planning"},
+            "trader": {"name": "Trade Execution", "phase": "execution"},
+            "risky_analyst": {"name": "Risk Assessment (Aggressive)", "phase": "risk_analysis"},
+            "neutral_analyst": {"name": "Risk Assessment (Neutral)", "phase": "risk_analysis"},
+            "safe_analyst": {"name": "Risk Assessment (Conservative)", "phase": "risk_analysis"},
+            "risk_judge": {"name": "Final Risk Evaluation", "phase": "risk_analysis"}
+        }
+        
+        # Find which agent just completed by examining the state
+        for key, value in state.items():
+            if key in ["__end__", "messages"]:
+                continue
+                
+            # Map the key to a more user-friendly name
+            agent_key = key.lower().replace(" ", "_").replace("_agent", "").replace("_node", "")
+            if agent_key in phase_map:
+                phase_info = phase_map[agent_key]
+                
+                # Find or create phase category
+                phase_category = None
+                for child in root_node["children"]:
+                    if child["id"] == phase_info["phase"]:
+                        phase_category = child
+                        break
+                
+                if not phase_category:
+                    phase_names = {
+                        "data_collection": "📊 Data Collection",
+                        "research": "🔍 Research & Analysis", 
+                        "planning": "📋 Trade Planning",
+                        "execution": "⚡ Trade Execution",
+                        "risk_analysis": "⚠️ Risk Management"
+                    }
+                    
+                    phase_category = {
+                        "id": phase_info["phase"],
+                        "name": phase_names.get(phase_info["phase"], phase_info["phase"]),
+                        "status": "in_progress",
+                        "content": f"Phase: {phase_names.get(phase_info['phase'], phase_info['phase'])}",
+                        "children": [],
+                        "timestamp": time.time()
+                    }
+                    root_node["children"].append(phase_category)
+                
+                # Check if this specific step already exists
+                step_exists = False
+                for step in phase_category["children"]:
+                    if step["name"] == phase_info["name"]:
+                        step["status"] = "completed"
+                        step["content"] = str(value) if value else "Completed successfully"
+                        step_exists = True
+                        break
+                
+                if not step_exists:
+                    # Add new step
+                    new_step = {
+                        "id": f"{phase_info['phase']}_{agent_key}_{len(phase_category['children'])}",
+                        "name": phase_info["name"],
+                        "status": "completed",
+                        "content": str(value) if value else "Completed successfully",
+                        "children": [],
+                        "timestamp": time.time()
+                    }
+                    phase_category["children"].append(new_step)
+                
+                # Check if phase is complete (simple heuristic)
+                completed_steps = sum(1 for step in phase_category["children"] if step["status"] == "completed")
+                if completed_steps >= len(phase_category["children"]):
+                    phase_category["status"] = "completed"
+                
+                # Update overall progress based on completed phases
+                total_phases = len([p for p in phase_map.values()])
+                completed_agents = sum(len(child["children"]) for child in root_node["children"] 
+                                     if child.get("children"))
+                app_state["overall_progress"] = min(100, int((completed_agents / max(total_phases, 1)) * 100))
 
 def run_trading_process(company_symbol: str):
     """Runs the TradingAgentsGraph in a separate thread."""

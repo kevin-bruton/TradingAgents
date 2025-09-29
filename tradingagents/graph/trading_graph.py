@@ -203,20 +203,17 @@ class TradingAgentsGraph:
         )
         args = self.propagator.get_graph_args()
 
-        if self.debug:
-            # Debug mode with tracing
+        if on_step_callback or self.debug:
+            # Stream mode for callbacks or debug mode
             trace = []
             for s in self.graph.stream(init_agent_state, **args):
                 trace.append(s)
                 if on_step_callback:
                     on_step_callback(s)
-            final_state = trace[-1]
+            final_state = trace[-1] if trace else {}
         else:
             # Standard mode without tracing
             final_state = self.graph.invoke(init_agent_state, **args)
-            # If not in debug mode, we still want to call the callback for the final state
-            if on_step_callback:
-                on_step_callback(final_state)
 
         # Store current state for reflection
         self.curr_state = final_state

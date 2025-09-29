@@ -1,6 +1,15 @@
 {% macro render_item(item) %}
     <li class="process-item status-{{ item.status }}">
-        <span hx-get="/content/{{ item.id }}" hx-target="#right-panel" hx-swap="innerHTML" class="item-name">{{ item.name }}</span>
+        <span hx-get="/content/{{ item.id }}" hx-target="#right-panel" hx-swap="innerHTML" class="item-name clickable">
+            <span class="status-icon">
+                {% if item.status == 'completed' %}✓
+                {% elif item.status == 'in_progress' %}⏳
+                {% elif item.status == 'error' %}❌
+                {% else %}⏸️
+                {% endif %}
+            </span>
+            {{ item.name }}
+        </span>
         {% if item.children %}
             <ul>
                 {% for child in item.children %}
@@ -17,7 +26,7 @@
 <div id="left-panel-content" hx-get="/status" hx-trigger="every 2s" hx-swap="innerHTML">
     <h2>Execution Status</h2>
     {% if tree %}
-        <ul>
+        <ul class="execution-tree">
             {% for item in tree %}
                 {{ render_item(item) }}
             {% endfor %}

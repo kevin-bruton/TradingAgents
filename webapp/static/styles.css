@@ -205,6 +205,81 @@ body {
     font-size: 1.1em;
 }
 
+/* Execution Tree Styles */
+.execution-tree {
+    margin-top: 20px;
+}
+
+.execution-tree ul {
+    margin-left: 20px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 15px;
+}
+
+.process-item {
+    position: relative;
+    margin-bottom: 5px;
+}
+
+.process-item::before {
+    content: '';
+    position: absolute;
+    left: -18px;
+    top: 12px;
+    width: 8px;
+    height: 2px;
+    background-color: var(--border-color);
+}
+
+.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clickable:hover {
+    transform: translateX(3px);
+}
+
+.status-icon {
+    margin-right: 8px;
+    font-size: 0.9em;
+}
+
+/* Loading indicator */
+.htmx-indicator {
+    display: none;
+    color: var(--accent-color);
+    font-size: 0.9em;
+    margin-top: 10px;
+    animation: pulse 2s infinite;
+}
+
+.htmx-request .htmx-indicator {
+    display: block;
+}
+
+/* Content display improvements */
+#right-panel pre {
+    background-color: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+#right-panel h3 {
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
 /* Animations */
 @keyframes pulse {
     0% {
