@@ -155,6 +155,21 @@ An interface will appear showing results as they load, letting you track the age
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
 
+## Web Frontend (HTMX/FastAPI)
+
+In addition to the CLI, a new web-based frontend is available to visualize the agent communication process in real-time. It allows you to set configuration parameters, start the trading analysis, and observe the step-by-step execution of agents and tools, including their outputs and any errors.
+
+### Running the Web Frontend
+
+1.  Ensure you have installed all dependencies using `uv sync`.
+2.  Navigate to the project root directory in your terminal.
+3.  Start the FastAPI server:
+    ```bash
+    uvicorn webapp.main:app --reload
+    ```
+4.  Open your web browser and go to `http://127.0.0.1:8000`.
+5.  Enter a company symbol (e.g., `AAPL`) in the configuration form and click "Start Process" to begin the analysis.
+
 ## TradingAgents Package
 
 ### Implementation Details

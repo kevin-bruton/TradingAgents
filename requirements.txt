@@ -24,3 +24,7 @@ rich
 questionary
 langchain_anthropic
 langchain-google-genai
+fastapi
+uvicorn
+python-multipart
+jinja2

@@ -192,7 +192,7 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0):
+    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0, on_step_callback=None):
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
@@ -206,17 +206,17 @@ class TradingAgentsGraph:
         if self.debug:
             # Debug mode with tracing
             trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
-
+            for s in self.graph.stream(init_agent_state, **args):
+                trace.append(s)
+                if on_step_callback:
+                    on_step_callback(s)
             final_state = trace[-1]
         else:
             # Standard mode without tracing
             final_state = self.graph.invoke(init_agent_state, **args)
+            # If not in debug mode, we still want to call the callback for the final state
+            if on_step_callback:
+                on_step_callback(final_state)
 
         # Store current state for reflection
         self.curr_state = final_state

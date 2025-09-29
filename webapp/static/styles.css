@@ -1,0 +1,219 @@
+/* Dark theme variables */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #242424;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --accent-color: #4CAF50;
+    --border-color: #333;
+    --input-bg: #2a2a2a;
+    --hover-color: #333;
+}
+
+/* Basic styles for the webapp */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+#left-panel {
+    width: 30%;
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+    background-color: var(--bg-secondary);
+}
+
+#right-panel {
+    width: 70%;
+    padding: 20px;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+}
+
+/* Overall Progress Bar */
+#overall-progress-container {
+    width: 100%;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    box-sizing: border-box;
+}
+
+#overall-progress-bar {
+    height: 6px;
+    background-color: var(--accent-color);
+    width: 0%; /* Initial width */
+    transition: width 0.5s ease-in-out, background-color 0.3s ease;
+    border-radius: 3px;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+#overall-progress-text {
+    margin-left: 15px;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* Main Content Layout */
+#main-content {
+    display: flex;
+    flex-grow: 1;
+    height: calc(100vh - 46px); /* Adjust for progress bar height */
+    background-color: var(--bg-primary);
+}
+
+/* Left Panel - Configuration and Controls */
+#left-panel {
+    width: 30%;
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background-color: var(--bg-secondary);
+}
+
+#left-panel h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+    font-size: 1.5em;
+    font-weight: 600;
+}
+
+#config-form {
+    background-color: var(--bg-primary);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#config-form label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+#config-form input {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 1em;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+#config-form input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+#config-form button {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#config-form button:hover {
+    background-color: #45a049;
+    transform: translateY(-1px);
+}
+
+#config-form button:active {
+    transform: translateY(0);
+}
+
+#left-panel ul {
+    list-style: none;
+    padding-left: 15px;
+    margin-top: 20px;
+}
+
+#left-panel li {
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+#left-panel li .item-name {
+    padding: 8px 12px;
+    border-radius: 4px;
+    display: inline-block;
+    transition: background-color 0.2s ease;
+}
+
+#left-panel li .item-name:hover {
+    background-color: var(--hover-color);
+}
+
+/* Status Indicators */
+.status-pending .item-name {
+    color: var(--text-secondary);
+    border-left: 3px solid var(--text-secondary);
+    padding-left: 10px;
+}
+
+.status-in_progress .item-name {
+    color: #3b82f6;
+    font-weight: 600;
+    border-left: 3px solid #3b82f6;
+    padding-left: 10px;
+    animation: pulse 2s infinite;
+}
+
+.status-completed .item-name {
+    color: var(--accent-color);
+    border-left: 3px solid var(--accent-color);
+    padding-left: 10px;
+}
+
+.status-error .item-name {
+    color: #ef4444;
+    font-weight: 600;
+    border-left: 3px solid #ef4444;
+    padding-left: 10px;
+}
+
+/* Right Panel Styles */
+#right-panel {
+    padding: 30px;
+}
+
+#right-panel p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 1.1em;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
