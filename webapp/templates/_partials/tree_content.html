@@ -29,23 +29,6 @@
     </li>
 {% endmacro %}
 
-<div id="overall-progress-bar" hx-swap-oob="true" style="width:{{ app_state.overall_progress }}%;"></div>
-<span id="overall-progress-text" hx-swap-oob="true">{{ app_state.overall_progress }}% ({{ app_state.overall_status }})</span>
-
-<h2>
-    {% if app_state.company_symbol %}
-        Trading Analysis for {{ app_state.company_symbol }}
-    {% else %}
-        Execution Status
-    {% endif %}
-</h2>
-
-{% if tree %}
-    <ul class="execution-tree" id="execution-tree" hx-get="/status-content" hx-trigger="every 5s" hx-swap="innerHTML">
-        {% for item in tree %}
-            {{ render_item(item) }}
-        {% endfor %}
-    </ul>
-{% else %}
-    <p id="execution-tree">No process running. Start a new one from the configuration.</p>
-{% endif %}
+{% for item in tree %}
+    {{ render_item(item) }}
+{% endfor %}

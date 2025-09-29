@@ -52,11 +52,8 @@ def update_execution_state(state: Dict[str, Any]):
     print(f"📡 Callback received state keys: {list(state.keys())}")
     
     with app_state_lock:
-        # Initialize the complete execution tree structure if not exists
-        if not app_state["execution_tree"] or (
-            len(app_state["execution_tree"]) == 1 and 
-            app_state["execution_tree"][0]["id"] == "initialization"
-        ):
+        # Ensure execution tree is initialized
+        if not app_state["execution_tree"]:
             app_state["execution_tree"] = initialize_complete_execution_tree()
         
         # Map LangGraph node names to our tracking system
@@ -149,77 +146,70 @@ def update_execution_state(state: Dict[str, Any]):
                 update_agent_status(agent_info, "completed", report_data, state)
         
         # Update overall progress
-        root_node = app_state["execution_tree"][0]
+        execution_tree = app_state["execution_tree"]
         total_agents = len(agent_state_mapping)
-        completed_agents = count_completed_agents(root_node)
+        completed_agents = count_completed_agents(execution_tree)
         app_state["overall_progress"] = min(100, int((completed_agents / max(total_agents, 1)) * 100))
         
         print(f"📊 Progress updated: {app_state['overall_progress']}% ({completed_agents}/{total_agents} agents)")
 
 def initialize_complete_execution_tree():
     """Initialize the complete execution tree with all agents in pending state."""
-    return [{
-        "id": "root",
-        "name": f"📈 Trading Analysis for {app_state['company_symbol']}",
-        "status": "in_progress", 
-        "content": f"Comprehensive trading analysis for {app_state['company_symbol']}",
-        "children": [
-            {
-                "id": "data_collection_phase",
-                "name": "📊 Data Collection Phase",
-                "status": "pending",
-                "content": "Collecting market data and analysis from various sources",
-                "children": [
-                    create_agent_node("market_analyst", "📈 Market Analyst"),
-                    create_agent_node("social_analyst", "📱 Social Media Analyst"),
-                    create_agent_node("news_analyst", "📰 News Analyst"),
-                    create_agent_node("fundamentals_analyst", "📊 Fundamentals Analyst")
-                ]
-            },
-            {
-                "id": "research_phase",
-                "name": "🔍 Research Phase",
-                "status": "pending",
-                "content": "Research and debate investment perspectives",
-                "children": [
-                    create_agent_node("bull_researcher", "🐂 Bull Researcher"),
-                    create_agent_node("bear_researcher", "🐻 Bear Researcher"),
-                    create_agent_node("research_manager", "🔍 Research Manager")
-                ]
-            },
-            {
-                "id": "planning_phase",
-                "name": "📋 Planning Phase", 
-                "status": "pending",
-                "content": "Develop trading strategy and execution plan",
-                "children": [
-                    create_agent_node("trade_planner", "📋 Trade Planner")
-                ]
-            },
-            {
-                "id": "execution_phase",
-                "name": "⚡ Execution Phase",
-                "status": "pending", 
-                "content": "Execute trades based on analysis and planning",
-                "children": [
-                    create_agent_node("trader", "⚡ Trader")
-                ]
-            },
-            {
-                "id": "risk_analysis_phase",
-                "name": "⚠️ Risk Management Phase",
-                "status": "pending",
-                "content": "Assess and manage investment risks",
-                "children": [
-                    create_agent_node("risky_analyst", "🚨 Aggressive Risk Analyst"),
-                    create_agent_node("neutral_analyst", "⚖️ Neutral Risk Analyst"),
-                    create_agent_node("safe_analyst", "🛡️ Conservative Risk Analyst"),
-                    create_agent_node("risk_judge", "⚠️ Risk Judge")
-                ]
-            }
-        ],
-        "timestamp": time.time()
-    }]
+    return [
+        {
+            "id": "data_collection_phase",
+            "name": "📊 Data Collection Phase",
+            "status": "pending",
+            "content": "Collecting market data and analysis from various sources",
+            "children": [
+                create_agent_node("market_analyst", "📈 Market Analyst"),
+                create_agent_node("social_analyst", "📱 Social Media Analyst"),
+                create_agent_node("news_analyst", "📰 News Analyst"),
+                create_agent_node("fundamentals_analyst", "📊 Fundamentals Analyst")
+            ]
+        },
+        {
+            "id": "research_phase",
+            "name": "🔍 Research Phase",
+            "status": "pending",
+            "content": "Research and debate investment perspectives",
+            "children": [
+                create_agent_node("bull_researcher", "🐂 Bull Researcher"),
+                create_agent_node("bear_researcher", "🐻 Bear Researcher"),
+                create_agent_node("research_manager", "🔍 Research Manager")
+            ]
+        },
+        {
+            "id": "planning_phase",
+            "name": "📋 Planning Phase", 
+            "status": "pending",
+            "content": "Develop trading strategy and execution plan",
+            "children": [
+                create_agent_node("trade_planner", "📋 Trade Planner")
+            ]
+        },
+        {
+            "id": "execution_phase",
+            "name": "⚡ Execution Phase",
+            "status": "pending", 
+            "content": "Execute trades based on analysis and planning",
+            "children": [
+                create_agent_node("trader", "⚡ Trader")
+            ]
+        },
+        {
+            "id": "risk_analysis_phase",
+            "name": "⚠️ Risk Management Phase",
+            "status": "pending",
+            "content": "Assess and manage investment risks",
+            "children": [
+                create_agent_node("risky_analyst", "🚨 Aggressive Risk Analyst"),
+                create_agent_node("neutral_analyst", "⚖️ Neutral Risk Analyst"),
+                create_agent_node("safe_analyst", "🛡️ Conservative Risk Analyst"),
+                create_agent_node("risk_judge", "⚠️ Risk Judge")
+            ]
+        }
+    ]
 
 def create_agent_node(agent_id: str, agent_name: str):
     """Create a standardized agent node with report and messages sub-items."""
@@ -262,10 +252,10 @@ def get_nested_value(data: dict, key_path: str):
 
 def update_agent_status(agent_info: dict, status: str, report_data: any, full_state: dict):
     """Update an agent's status and content in the execution tree."""
-    root_node = app_state["execution_tree"][0]
+    execution_tree = app_state["execution_tree"]
     
     # Find the agent in the tree
-    agent_node = find_agent_in_tree(agent_info["agent_id"], root_node)
+    agent_node = find_agent_in_tree(agent_info["agent_id"], execution_tree)
     if not agent_node:
         return
         
@@ -287,14 +277,15 @@ def update_agent_status(agent_info: dict, status: str, report_data: any, full_st
             messages_node["content"] = extract_agent_messages(full_state, agent_info["agent_id"])
     
     # Update phase status if all agents in phase are completed
-    update_phase_status_if_complete(agent_info["phase"], root_node)
+    update_phase_status_if_complete(agent_info["phase"], execution_tree)
 
-def find_agent_in_tree(agent_id: str, root_node: dict):
+def find_agent_in_tree(agent_id: str, tree: list):
     """Find an agent node in the execution tree."""
-    for phase in root_node["children"]:
-        for agent in phase["children"]:
-            if agent["id"] == agent_id:
-                return agent
+    for phase in tree:
+        if phase.get("children"):
+            for agent in phase["children"]:
+                if agent["id"] == agent_id:
+                    return agent
     return None
 
 def find_item_by_id(item_id: str, items: list):
@@ -326,9 +317,9 @@ def extract_agent_messages(state: dict, agent_id: str) -> str:
     else:
         return "💬 Agent Messages\n\nExecution completed without specific message logs"
 
-def update_phase_status_if_complete(phase_id: str, root_node: dict):
+def update_phase_status_if_complete(phase_id: str, execution_tree: list):
     """Update phase status to completed if all its agents are completed."""
-    phase_node = find_item_by_id(f"{phase_id}_phase", root_node["children"])
+    phase_node = find_item_by_id(f"{phase_id}_phase", execution_tree)
     if not phase_node:
         return
         
@@ -338,13 +329,14 @@ def update_phase_status_if_complete(phase_id: str, root_node: dict):
         phase_node["status"] = "completed"
         phase_node["content"] = f"✅ {phase_node['name']} - All agents completed successfully"
 
-def count_completed_agents(root_node: dict) -> int:
+def count_completed_agents(execution_tree: list) -> int:
     """Count the number of completed agents across all phases."""
     count = 0
-    for phase in root_node["children"]:
-        for agent in phase["children"]:
-            if agent["status"] == "completed":
-                count += 1
+    for phase in execution_tree:
+        if phase.get("children"):
+            for agent in phase["children"]:
+                if agent["status"] == "completed":
+                    count += 1
     return count
 
 def run_trading_process(company_symbol: str, config: Dict[str, Any]):
@@ -475,15 +467,8 @@ async def start_process(
             "analysis_date": analysis_date
         }
         
-        # Initialize execution tree with startup message
-        app_state["execution_tree"] = [{
-            "id": "initialization",
-            "name": f"🚀 Initializing Trading Analysis for {company_symbol}",
-            "status": "in_progress",
-            "content": f"Starting comprehensive trading analysis for {company_symbol}...\n\nConfiguration:\n• LLM Provider: {llm_provider}\n• Quick Think Model: {quick_think_llm}\n• Deep Think Model: {deep_think_llm}\n• Max Debate Rounds: {max_debate_rounds}\n• Cost Per Trade: ${cost_per_trade}\n• Analysis Date: {analysis_date}\n\nInitializing trading agents and preparing analysis pipeline...",
-            "children": [],
-            "timestamp": time.time()
-        }]
+        # Initialize execution tree with complete structure
+        app_state["execution_tree"] = initialize_complete_execution_tree()
 
     background_tasks.add_task(run_trading_process, company_symbol, app_state["config"])
     
@@ -495,6 +480,58 @@ async def get_status():
     with app_state_lock:
         template = jinja_env.get_template("_partials/left_panel.html")
         return template.render(tree=app_state["execution_tree"], app_state=app_state)
+
+@app.get("/status-content", response_class=HTMLResponse)
+async def get_status_content():
+    with app_state_lock:
+        if not app_state["execution_tree"]:
+            return HTMLResponse(content="<p>No process running. Start a new one from the configuration.</p>")
+        
+        template = jinja_env.get_template("_partials/tree_content.html")
+        tree_content = template.render(tree=app_state["execution_tree"])
+        
+        # Add out-of-band updates for progress bar
+        progress_updates = f'''
+        <div id="overall-progress-bar" hx-swap-oob="true" style="width:{app_state["overall_progress"]}%;"></div>
+        <span id="overall-progress-text" hx-swap-oob="true">{app_state["overall_progress"]}% ({app_state["overall_status"]})</span>
+        '''
+        
+        return HTMLResponse(content=tree_content + progress_updates)
+
+@app.get("/status-updates")
+async def get_status_updates():
+    """Return only the status updates as JSON for targeted updates."""
+    with app_state_lock:
+        status_updates = {}
+        
+        def extract_status_info(items, prefix=""):
+            for item in items:
+                item_id = item["id"]
+                status_updates[item_id] = {
+                    "status": item["status"],
+                    "status_icon": get_status_icon(item["status"])
+                }
+                if item.get("children"):
+                    extract_status_info(item["children"])
+        
+        extract_status_info(app_state["execution_tree"])
+        
+        return {
+            "status_updates": status_updates,
+            "overall_progress": app_state["overall_progress"],
+            "overall_status": app_state["overall_status"]
+        }
+
+def get_status_icon(status: str) -> str:
+    """Get the status icon for a given status."""
+    if status == 'completed':
+        return '✅'
+    elif status == 'in_progress':
+        return '⏳'
+    elif status == 'error':
+        return '❌'
+    else:
+        return '⏸️'
 
 def find_item_in_tree(item_id: str, tree: list) -> Dict[str, Any] | None:
     """Recursively searches the execution tree for an item by its ID."""

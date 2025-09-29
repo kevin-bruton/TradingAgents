@@ -203,10 +203,154 @@
             }
         }
 
+        // Save the current expansion state of all toggleable items
+        function saveExpansionState() {
+            const state = {};
+            const executionTree = document.querySelector('.execution-tree');
+            if (executionTree) {
+                const items = executionTree.querySelectorAll('.process-item');
+                items.forEach(item => {
+                    const children = item.querySelector('.item-children');
+                    const button = item.querySelector('.toggle-btn');
+                    if (children && button) {
+                        const itemId = getItemId(item);
+                        if (itemId) {
+                            state[itemId] = children.classList.contains('expanded');
+                        }
+                    }
+                });
+            }
+            return state;
+        }
+
+        // Restore the expansion state after content update
+        function restoreExpansionState(savedState) {
+            if (!savedState) return;
+            
+            const executionTree = document.querySelector('.execution-tree');
+            if (executionTree) {
+                const items = executionTree.querySelectorAll('.process-item');
+                items.forEach(item => {
+                    const children = item.querySelector('.item-children');
+                    const button = item.querySelector('.toggle-btn');
+                    if (children && button) {
+                        const itemId = getItemId(item);
+                        if (itemId && savedState.hasOwnProperty(itemId)) {
+                            if (savedState[itemId]) {
+                                // Expand
+                                children.classList.remove('collapsed');
+                                children.classList.add('expanded');
+                                button.classList.add('expanded');
+                            } else {
+                                // Collapse
+                                children.classList.remove('expanded');
+                                children.classList.add('collapsed');
+                                button.classList.remove('expanded');
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Get item ID from the clickable span
+        function getItemId(processItem) {
+            const clickableSpan = processItem.querySelector('.item-name.clickable');
+            if (clickableSpan) {
+                const hxGet = clickableSpan.getAttribute('hx-get');
+                if (hxGet) {
+                    const match = hxGet.match(/\/content\/(.+)$/);
+                    return match ? match[1] : null;
+                }
+            }
+            return null;
+        }
+
+        // Handle HTMX before request to save state
+        document.addEventListener('htmx:beforeSwap', function(event) {
+            if (event.target.id === 'left-panel-content') {
+                window.savedExpansionState = saveExpansionState();
+            }
+        });
+
+        // Handle HTMX after settle to restore state
+        document.addEventListener('htmx:afterSettle', function(event) {
+            if (event.target.id === 'left-panel-content' && window.savedExpansionState) {
+                restoreExpansionState(window.savedExpansionState);
+            }
+        });
+
+        // Targeted status updates to prevent flickering
+        function updateStatusIndicators() {
+            fetch('/status-updates')
+                .then(response => response.json())
+                .then(data => {
+                    // Update overall progress
+                    const progressBar = document.getElementById('overall-progress-bar');
+                    const progressText = document.getElementById('overall-progress-text');
+                    if (progressBar) {
+                        progressBar.style.width = data.overall_progress + '%';
+                    }
+                    if (progressText) {
+                        progressText.textContent = data.overall_progress + '% (' + data.overall_status + ')';
+                    }
+
+                    // Update individual status icons
+                    for (const [itemId, statusInfo] of Object.entries(data.status_updates)) {
+                        const statusIcon = document.querySelector(`[hx-get="/content/${itemId}"] .status-icon`);
+                        if (statusIcon && statusIcon.textContent !== statusInfo.status_icon) {
+                            statusIcon.textContent = statusInfo.status_icon;
+                            
+                            // Update the parent item's CSS class
+                            const processItem = statusIcon.closest('.process-item');
+                            if (processItem) {
+                                // Remove old status classes
+                                processItem.classList.remove('status-pending', 'status-in_progress', 'status-completed', 'status-error');
+                                // Add new status class
+                                processItem.classList.add('status-' + statusInfo.status);
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.log('Status update failed:', error);
+                });
+        }
+
+        // Start targeted updates when execution tree is present
+        function startTargetedUpdates() {
+            if (document.querySelector('.execution-tree')) {
+                window.statusUpdateInterval = setInterval(updateStatusIndicators, 2000); // Update every 2 seconds
+            }
+        }
+
+        // Stop targeted updates
+        function stopTargetedUpdates() {
+            if (window.statusUpdateInterval) {
+                clearInterval(window.statusUpdateInterval);
+                window.statusUpdateInterval = null;
+            }
+        }
+
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             setCurrentDate();
             updateModelOptions(); // Set initial model options for OpenRouter
+            
+            // Start targeted updates if execution tree is already present
+            startTargetedUpdates();
+        });
+
+        // Handle when new content is loaded (like when starting a process)
+        document.addEventListener('htmx:afterSettle', function(event) {
+            if (event.target.id === 'left-panel-content') {
+                if (window.savedExpansionState) {
+                    restoreExpansionState(window.savedExpansionState);
+                }
+                // Start or restart targeted updates when new content is loaded
+                stopTargetedUpdates();
+                startTargetedUpdates();
+            }
         });
     </script>
 </body>
