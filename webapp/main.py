@@ -148,17 +148,46 @@ def update_execution_state(state: Dict[str, Any]):
                                      if child.get("children"))
                 app_state["overall_progress"] = min(100, int((completed_agents / max(total_phases, 1)) * 100))
 
-def run_trading_process(company_symbol: str):
+def run_trading_process(company_symbol: str, config: Dict[str, Any]):
     """Runs the TradingAgentsGraph in a separate thread."""
     with app_state_lock:
         app_state["overall_status"] = "in_progress"
         app_state["overall_progress"] = 0
 
     try:
-        graph = TradingAgentsGraph()
-        current_date = time.strftime("%Y-%m-%d")  # Use current date for analysis
+        # Import and create custom config
+        from tradingagents.default_config import DEFAULT_CONFIG
+        
+        # Create custom configuration with user selections
+        custom_config = DEFAULT_CONFIG.copy()
+        custom_config["llm_provider"] = config["llm_provider"]
+        custom_config["max_debate_rounds"] = config["max_debate_rounds"]
+        custom_config["cost_per_trade"] = config["cost_per_trade"]
+        
+        # Set the appropriate LLM models based on provider
+        if config["llm_provider"] == "google":
+            custom_config["gemini_quick_think_llm"] = config["quick_think_llm"]
+            custom_config["gemini_deep_think_llm"] = config["deep_think_llm"]
+        else:
+            custom_config["quick_think_llm"] = config["quick_think_llm"]
+            custom_config["deep_think_llm"] = config["deep_think_llm"]
+        
+        # Set backend URL based on provider
+        if config["llm_provider"] == "openrouter":
+            custom_config["backend_url"] = "https://openrouter.ai/api/v1"
+        elif config["llm_provider"] == "google":
+            custom_config["backend_url"] = "https://generativelanguage.googleapis.com/v1"
+        elif config["llm_provider"] == "anthropic":
+            custom_config["backend_url"] = "https://api.anthropic.com/"
+        elif config["llm_provider"] == "ollama":
+            custom_config["backend_url"] = f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/v1"
+        else:  # openai
+            custom_config["backend_url"] = "https://api.openai.com/v1"
+        
+        graph = TradingAgentsGraph(config=custom_config)
+        analysis_date = config["analysis_date"]  # Use user-selected date
         # The propagate method now accepts the callback and trade_date
-        final_state = graph.propagate(company_symbol, trade_date=current_date, on_step_callback=update_execution_state)
+        final_state = graph.propagate(company_symbol, trade_date=analysis_date, on_step_callback=update_execution_state)
         
         with app_state_lock:
             app_state["overall_status"] = "completed"
@@ -197,7 +226,16 @@ async def read_root():
     return template.render(app_state=app_state)
 
 @app.post("/start", response_class=HTMLResponse)
-async def start_process(background_tasks: BackgroundTasks, company_symbol: str = Form(...)):
+async def start_process(
+    background_tasks: BackgroundTasks, 
+    company_symbol: str = Form(...),
+    llm_provider: str = Form(...), 
+    quick_think_llm: str = Form(...),
+    deep_think_llm: str = Form(...),
+    max_debate_rounds: int = Form(...),
+    cost_per_trade: float = Form(...),
+    analysis_date: str = Form(...)
+):
     # Check if all required environment variables are set
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
     if missing_vars:
@@ -224,8 +262,18 @@ async def start_process(background_tasks: BackgroundTasks, company_symbol: str =
         app_state["execution_tree"] = [] # Clear for new run
         app_state["overall_status"] = "in_progress"
         app_state["overall_progress"] = 0
+        
+        # Store all configuration parameters
+        app_state["config"] = {
+            "llm_provider": llm_provider,
+            "quick_think_llm": quick_think_llm,
+            "deep_think_llm": deep_think_llm,
+            "max_debate_rounds": max_debate_rounds,
+            "cost_per_trade": cost_per_trade,
+            "analysis_date": analysis_date
+        }
 
-    background_tasks.add_task(run_trading_process, company_symbol)
+    background_tasks.add_task(run_trading_process, company_symbol, app_state["config"])
     
     template = jinja_env.get_template("_partials/left_panel.html")
     return template.render(tree=app_state["execution_tree"], app_state=app_state)

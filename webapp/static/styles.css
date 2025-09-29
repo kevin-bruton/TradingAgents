@@ -103,7 +103,8 @@ body {
     font-size: 0.9em;
 }
 
-#config-form input {
+#config-form input,
+#config-form select {
     width: 100%;
     padding: 10px;
     margin-bottom: 15px;
@@ -113,12 +114,33 @@ body {
     color: var(--text-primary);
     font-size: 1em;
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box;
 }
 
-#config-form input:focus {
+#config-form input:focus,
+#config-form select:focus {
     outline: none;
     border-color: var(--accent-color);
     box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+/* Specific styling for select dropdowns */
+#config-form select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6,9 12,15 18,9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+    padding-right: 40px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+#config-form select option {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    padding: 8px;
 }
 
 #config-form button {
