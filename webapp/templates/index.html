@@ -64,6 +64,23 @@
                     
                     <label for="analysis_date">Analysis Date:</label>
                     <input type="date" id="analysis_date" name="analysis_date" value="{{ default_date }}" required>
+
+                    <fieldset style="margin-top:1rem; border:1px solid #444; padding:0.75rem;">
+                        <legend>Current Position (Optional)</legend>
+                        <label for="position_status">Position Status:</label>
+                        <select id="position_status" name="position_status" onchange="togglePositionFields()">
+                            <option value="none" selected>No Open Position</option>
+                            <option value="long">Long Position</option>
+                            <option value="short">Short Position</option>
+                        </select>
+                        <div id="position-details" style="display:none; margin-top:0.5rem;">
+                            <label for="current_stop_loss">Existing Stop Loss:</label>
+                            <input type="number" step="0.01" min="0" id="current_stop_loss" name="current_stop_loss" placeholder="e.g. 150.25">
+                            <label for="current_take_profit">Existing Take Profit:</label>
+                            <input type="number" step="0.01" min="0" id="current_take_profit" name="current_take_profit" placeholder="e.g. 180.00">
+                            <small>If left blank, no current levels will be assumed. New levels may be suggested.</small>
+                        </div>
+                    </fieldset>
                     
                     <button type="submit">Start Process</button>
                     <div id="loading" class="htmx-indicator">Starting process...</div>
@@ -181,6 +198,18 @@
                     option.textContent = model.text;
                     deepSelect.appendChild(option);
                 });
+            }
+        }
+
+        function togglePositionFields() {
+            const status = document.getElementById('position_status').value;
+            const details = document.getElementById('position-details');
+            if (status === 'long' || status === 'short') {
+                details.style.display = 'block';
+            } else {
+                details.style.display = 'none';
+                document.getElementById('current_stop_loss').value = '';
+                document.getElementById('current_take_profit').value = '';
             }
         }
 

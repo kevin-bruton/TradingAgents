@@ -267,7 +267,7 @@ def create_agent_node(agent_id: str, agent_name: str):
         "children": [
             {
                 "id": f"{agent_id}_messages",
-                "name": "� Messages",
+                "name": "💬 Messages",
                 "status": "pending", 
                 "content": "No messages yet",
                 "children": [],
@@ -275,7 +275,7 @@ def create_agent_node(agent_id: str, agent_name: str):
             },
             {
                 "id": f"{agent_id}_report",
-                "name": "� Report",
+                "name": "📄 Report",
                 "status": "pending",
                 "content": "Report not yet generated",
                 "children": [],
@@ -520,8 +520,21 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
         analysis_date = config["analysis_date"]  # Use user-selected date
         print(f"🔄 Starting propagation for {company_symbol} on {analysis_date}")
         
-        # The propagate method now accepts the callback and trade_date
-        final_state, processed_signal = graph.propagate(company_symbol, trade_date=analysis_date, on_step_callback=update_execution_state)
+        # Include user position context
+        user_position = config.get("user_position", "none")
+        init_sl = config.get("initial_stop_loss")
+        init_tp = config.get("initial_take_profit")
+
+        # The propagate method now accepts the callback and trade_date and we will inject user position.
+        final_state, processed_signal = graph.propagate(
+            company_symbol,
+            trade_date=analysis_date,
+            user_position=user_position,
+            cost_per_trade=config.get("cost_per_trade", 0.0),
+            on_step_callback=update_execution_state,
+            initial_stop_loss=init_sl,
+            initial_take_profit=init_tp,
+        )
         print(f"✅ Propagation completed for {company_symbol}")
         
         with app_state_lock:
@@ -571,7 +584,10 @@ async def start_process(
     deep_think_llm: str = Form(...),
     max_debate_rounds: int = Form(...),
     cost_per_trade: float = Form(...),
-    analysis_date: str = Form(...)
+    analysis_date: str = Form(...),
+    position_status: str = Form("none"),
+    current_stop_loss: str | None = Form(None),
+    current_take_profit: str | None = Form(None)
 ):
     # Check if all required environment variables are set
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
@@ -600,13 +616,40 @@ async def start_process(
         app_state["overall_progress"] = 5  # Show initial progress
         
         # Store all configuration parameters
+        # Validate and normalize position inputs
+        position_status = (position_status or "none").lower()
+        if position_status not in ("none", "long", "short"):
+            position_status = "none"
+
+        def _parse_level(val: str | None):
+            if val is None or val == "":
+                return None
+            try:
+                f = float(val)
+                if f <= 0:
+                    return None
+                return f
+            except ValueError:
+                return None
+
+        initial_stop_loss = _parse_level(current_stop_loss)
+        initial_take_profit = _parse_level(current_take_profit)
+
+        # If no open position, ignore provided levels
+        if position_status == "none":
+            initial_stop_loss = None
+            initial_take_profit = None
+
         app_state["config"] = {
             "llm_provider": llm_provider,
             "quick_think_llm": quick_think_llm,
             "deep_think_llm": deep_think_llm,
             "max_debate_rounds": max_debate_rounds,
             "cost_per_trade": cost_per_trade,
-            "analysis_date": analysis_date
+            "analysis_date": analysis_date,
+            "user_position": position_status,
+            "initial_stop_loss": initial_stop_loss,
+            "initial_take_profit": initial_take_profit
         }
         
         # Initialize execution tree with complete structure
