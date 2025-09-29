@@ -238,6 +238,13 @@ body {
     padding-left: 15px;
 }
 
+.item-children {
+    margin-left: 20px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 15px;
+    margin-top: 8px;
+}
+
 .process-item {
     position: relative;
     margin-bottom: 5px;
@@ -265,6 +272,31 @@ body {
 .status-icon {
     margin-right: 8px;
     font-size: 0.9em;
+}
+
+/* Specific styling for different item types */
+.process-item[class*="_phase"] .item-name {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: var(--text-primary);
+}
+
+.process-item[class*="analyst"] .item-name,
+.process-item[class*="researcher"] .item-name,
+.process-item[class*="planner"] .item-name,
+.process-item[class*="trader"] .item-name,
+.process-item[class*="judge"] .item-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    padding-left: 8px;
+}
+
+.process-item[class*="_report"] .item-name,
+.process-item[class*="_messages"] .item-name {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    font-style: italic;
+    padding-left: 16px;
 }
 
 /* Loading indicator */

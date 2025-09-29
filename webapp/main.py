@@ -52,126 +52,300 @@ def update_execution_state(state: Dict[str, Any]):
     print(f"📡 Callback received state keys: {list(state.keys())}")
     
     with app_state_lock:
-        # Initialize the root node if needed
+        # Initialize the complete execution tree structure if not exists
         if not app_state["execution_tree"] or (
             len(app_state["execution_tree"]) == 1 and 
             app_state["execution_tree"][0]["id"] == "initialization"
         ):
-            app_state["execution_tree"] = [{
-                "id": "root",
-                "name": f"Trading Analysis for {app_state['company_symbol']}",
-                "status": "in_progress",
-                "content": f"Analyzing {app_state['company_symbol']} using multiple trading agents",
+            app_state["execution_tree"] = initialize_complete_execution_tree()
+        
+        # Map LangGraph node names to our tracking system
+        agent_state_mapping = {
+            "Market Analyst": {
+                "phase": "data_collection", 
+                "agent_id": "market_analyst",
+                "report_key": "market_report",
+                "report_name": "Market Analysis Report"
+            },
+            "Social Analyst": {
+                "phase": "data_collection", 
+                "agent_id": "social_analyst",
+                "report_key": "sentiment_report", 
+                "report_name": "Sentiment Analysis Report"
+            },
+            "News Analyst": {
+                "phase": "data_collection", 
+                "agent_id": "news_analyst",
+                "report_key": "news_report",
+                "report_name": "News Analysis Report"
+            },
+            "Fundamentals Analyst": {
+                "phase": "data_collection", 
+                "agent_id": "fundamentals_analyst",
+                "report_key": "fundamentals_report",
+                "report_name": "Fundamentals Report"
+            },
+            "Bull Researcher": {
+                "phase": "research", 
+                "agent_id": "bull_researcher",
+                "report_key": "investment_debate_state.bull_history",
+                "report_name": "Bull Case Analysis"
+            },
+            "Bear Researcher": {
+                "phase": "research", 
+                "agent_id": "bear_researcher",
+                "report_key": "investment_debate_state.bear_history",
+                "report_name": "Bear Case Analysis"
+            },
+            "Research Manager": {
+                "phase": "research", 
+                "agent_id": "research_manager",
+                "report_key": "investment_debate_state.judge_decision",
+                "report_name": "Research Synthesis"
+            },
+            "Trade Planner": {
+                "phase": "planning", 
+                "agent_id": "trade_planner",
+                "report_key": "trader_investment_plan",
+                "report_name": "Trading Plan"
+            },
+            "Trader": {
+                "phase": "execution", 
+                "agent_id": "trader",
+                "report_key": "investment_plan",
+                "report_name": "Execution Report"
+            },
+            "Risky Analyst": {
+                "phase": "risk_analysis", 
+                "agent_id": "risky_analyst",
+                "report_key": "risk_debate_state.risky_history",
+                "report_name": "Risk Assessment (Aggressive)"
+            },
+            "Neutral Analyst": {
+                "phase": "risk_analysis", 
+                "agent_id": "neutral_analyst",
+                "report_key": "risk_debate_state.neutral_history",
+                "report_name": "Risk Assessment (Neutral)"
+            },
+            "Safe Analyst": {
+                "phase": "risk_analysis", 
+                "agent_id": "safe_analyst",
+                "report_key": "risk_debate_state.safe_history",
+                "report_name": "Risk Assessment (Conservative)"
+            },
+            "Risk Judge": {
+                "phase": "risk_analysis", 
+                "agent_id": "risk_judge",
+                "report_key": "final_trade_decision",
+                "report_name": "Final Risk Decision"
+            }
+        }
+        
+        # Update agent statuses based on available reports
+        for agent_name, agent_info in agent_state_mapping.items():
+            # Check if this agent has completed (has report data)
+            report_data = get_nested_value(state, agent_info["report_key"])
+            if report_data:
+                update_agent_status(agent_info, "completed", report_data, state)
+        
+        # Update overall progress
+        root_node = app_state["execution_tree"][0]
+        total_agents = len(agent_state_mapping)
+        completed_agents = count_completed_agents(root_node)
+        app_state["overall_progress"] = min(100, int((completed_agents / max(total_agents, 1)) * 100))
+        
+        print(f"📊 Progress updated: {app_state['overall_progress']}% ({completed_agents}/{total_agents} agents)")
+
+def initialize_complete_execution_tree():
+    """Initialize the complete execution tree with all agents in pending state."""
+    return [{
+        "id": "root",
+        "name": f"📈 Trading Analysis for {app_state['company_symbol']}",
+        "status": "in_progress", 
+        "content": f"Comprehensive trading analysis for {app_state['company_symbol']}",
+        "children": [
+            {
+                "id": "data_collection_phase",
+                "name": "📊 Data Collection Phase",
+                "status": "pending",
+                "content": "Collecting market data and analysis from various sources",
+                "children": [
+                    create_agent_node("market_analyst", "📈 Market Analyst"),
+                    create_agent_node("social_analyst", "📱 Social Media Analyst"),
+                    create_agent_node("news_analyst", "📰 News Analyst"),
+                    create_agent_node("fundamentals_analyst", "📊 Fundamentals Analyst")
+                ]
+            },
+            {
+                "id": "research_phase",
+                "name": "🔍 Research Phase",
+                "status": "pending",
+                "content": "Research and debate investment perspectives",
+                "children": [
+                    create_agent_node("bull_researcher", "🐂 Bull Researcher"),
+                    create_agent_node("bear_researcher", "🐻 Bear Researcher"),
+                    create_agent_node("research_manager", "🔍 Research Manager")
+                ]
+            },
+            {
+                "id": "planning_phase",
+                "name": "📋 Planning Phase", 
+                "status": "pending",
+                "content": "Develop trading strategy and execution plan",
+                "children": [
+                    create_agent_node("trade_planner", "📋 Trade Planner")
+                ]
+            },
+            {
+                "id": "execution_phase",
+                "name": "⚡ Execution Phase",
+                "status": "pending", 
+                "content": "Execute trades based on analysis and planning",
+                "children": [
+                    create_agent_node("trader", "⚡ Trader")
+                ]
+            },
+            {
+                "id": "risk_analysis_phase",
+                "name": "⚠️ Risk Management Phase",
+                "status": "pending",
+                "content": "Assess and manage investment risks",
+                "children": [
+                    create_agent_node("risky_analyst", "🚨 Aggressive Risk Analyst"),
+                    create_agent_node("neutral_analyst", "⚖️ Neutral Risk Analyst"),
+                    create_agent_node("safe_analyst", "🛡️ Conservative Risk Analyst"),
+                    create_agent_node("risk_judge", "⚠️ Risk Judge")
+                ]
+            }
+        ],
+        "timestamp": time.time()
+    }]
+
+def create_agent_node(agent_id: str, agent_name: str):
+    """Create a standardized agent node with report and messages sub-items."""
+    return {
+        "id": agent_id,
+        "name": agent_name,
+        "status": "pending",
+        "content": f"Agent: {agent_name} - Awaiting execution",
+        "children": [
+            {
+                "id": f"{agent_id}_report",
+                "name": "📄 Report",
+                "status": "pending",
+                "content": "Report not yet generated",
                 "children": [],
                 "timestamp": time.time()
-            }]
-        
-        root_node = app_state["execution_tree"][0]
-        
-        # Map LangGraph node names to user-friendly display info
-        node_mapping = {
-            "Market Analyst": {"name": "📈 Market Analysis", "phase": "data_collection"},
-            "Social Analyst": {"name": "📱 Social Media Analysis", "phase": "data_collection"},
-            "News Analyst": {"name": "📰 News Analysis", "phase": "data_collection"},
-            "Fundamentals Analyst": {"name": "📊 Fundamental Analysis", "phase": "data_collection"},
-            "Bull Researcher": {"name": "🐂 Bull Case Research", "phase": "research"},
-            "Bear Researcher": {"name": "🐻 Bear Case Research", "phase": "research"},
-            "Research Manager": {"name": "🔍 Research Synthesis", "phase": "research"},
-            "Trade Planner": {"name": "📋 Trade Planning", "phase": "planning"},
-            "Trader": {"name": "⚡ Trade Execution", "phase": "execution"},
-            "Risky Analyst": {"name": "🚨 Risk Assessment (Aggressive)", "phase": "risk_analysis"},
-            "Neutral Analyst": {"name": "⚖️ Risk Assessment (Neutral)", "phase": "risk_analysis"},
-            "Safe Analyst": {"name": "🛡️ Risk Assessment (Conservative)", "phase": "risk_analysis"},
-            "Risk Judge": {"name": "⚠️ Final Risk Evaluation", "phase": "risk_analysis"}
-        }
-        
-        phase_names = {
-            "data_collection": "📊 Data Collection",
-            "research": "🔍 Research & Analysis", 
-            "planning": "📋 Trade Planning",
-            "execution": "⚡ Trade Execution",
-            "risk_analysis": "⚠️ Risk Management"
-        }
-        
-        # The state dict contains the current state of all nodes
-        # We need to determine what has actually been executed
-        current_step = None
-        
-        # LangGraph streams the full state each time, so we need to detect what's new
-        # Look for populated report fields to determine what has been completed
-        if state.get("market_report") and not any(child.get("id") == "data_collection_market" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Market Analyst"
-        elif state.get("sentiment_report") and not any(child.get("id") == "data_collection_social" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Social Analyst"
-        elif state.get("news_report") and not any(child.get("id") == "data_collection_news" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "News Analyst"
-        elif state.get("fundamentals_report") and not any(child.get("id") == "data_collection_fundamentals" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Fundamentals Analyst"
-        elif state.get("investment_debate_state", {}).get("bull_history") and not any(child.get("id") == "research_bull" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Bull Researcher"
-        elif state.get("investment_debate_state", {}).get("bear_history") and not any(child.get("id") == "research_bear" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Bear Researcher"
-        elif state.get("investment_debate_state", {}).get("judge_decision") and not any(child.get("id") == "research_manager" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Research Manager"
-        elif state.get("trader_investment_plan") and not any(child.get("id") == "planning_trade_planner" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Trade Planner"
-        elif state.get("investment_plan") and not any(child.get("id") == "execution_trader" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Trader"
-        elif state.get("risk_debate_state", {}).get("risky_history") and not any(child.get("id") == "risk_analysis_risky" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Risky Analyst"
-        elif state.get("risk_debate_state", {}).get("neutral_history") and not any(child.get("id") == "risk_analysis_neutral" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Neutral Analyst"
-        elif state.get("risk_debate_state", {}).get("safe_history") and not any(child.get("id") == "risk_analysis_safe" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Safe Analyst"
-        elif state.get("final_trade_decision") and not any(child.get("id") == "risk_analysis_risk_judge" for phase in root_node["children"] for child in phase.get("children", [])):
-            current_step = "Risk Judge"
-        
-        if current_step and current_step in node_mapping:
-            print(f"🎯 Processing step: {current_step}")
-            node_info = node_mapping[current_step]
-            phase_id = node_info["phase"]
-            
-            # Find or create phase category
-            phase_category = None
-            for child in root_node["children"]:
-                if child["id"] == phase_id:
-                    phase_category = child
-                    break
-            
-            if not phase_category:
-                phase_category = {
-                    "id": phase_id,
-                    "name": phase_names.get(phase_id, phase_id),
-                    "status": "in_progress",
-                    "content": f"Phase: {phase_names.get(phase_id, phase_id)}",
-                    "children": [],
-                    "timestamp": time.time()
-                }
-                root_node["children"].append(phase_category)
-            
-            # Add new step
-            step_id = f"{phase_id}_{current_step.lower().replace(' ', '_')}"
-            new_step = {
-                "id": step_id,
-                "name": node_info["name"],
-                "status": "completed",
-                "content": f"✅ {node_info['name']} completed successfully",
+            },
+            {
+                "id": f"{agent_id}_messages",
+                "name": "💬 Messages",
+                "status": "pending", 
+                "content": "No messages yet",
                 "children": [],
                 "timestamp": time.time()
             }
-            phase_category["children"].append(new_step)
-            
-            # Mark phase as completed if it has steps
-            phase_category["status"] = "completed"
-            
-            # Update overall progress
-            total_steps = len(node_mapping)
-            completed_steps = sum(len(child["children"]) for child in root_node["children"])
-            app_state["overall_progress"] = min(100, int((completed_steps / max(total_steps, 1)) * 100))
-            
-            print(f"📊 Progress updated: {app_state['overall_progress']}% ({completed_steps}/{total_steps} steps)")
+        ],
+        "timestamp": time.time()
+    }
+
+def get_nested_value(data: dict, key_path: str):
+    """Get value from nested dict using dot notation (e.g., 'investment_debate_state.bull_history')."""
+    keys = key_path.split('.')
+    value = data
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
         else:
-            print(f"⏳ No new step detected or step already processed")
+            return None
+    return value
+
+def update_agent_status(agent_info: dict, status: str, report_data: any, full_state: dict):
+    """Update an agent's status and content in the execution tree."""
+    root_node = app_state["execution_tree"][0]
+    
+    # Find the agent in the tree
+    agent_node = find_agent_in_tree(agent_info["agent_id"], root_node)
+    if not agent_node:
+        return
+        
+    # Update agent status
+    if agent_node["status"] != "completed":
+        agent_node["status"] = status
+        agent_node["content"] = f"✅ {agent_node['name']} - Analysis completed"
+        
+        # Update report sub-item
+        report_node = find_item_by_id(f"{agent_info['agent_id']}_report", agent_node["children"])
+        if report_node:
+            report_node["status"] = "completed"
+            report_node["content"] = format_report_content(agent_info["report_name"], report_data)
+            
+        # Update messages sub-item (extract from state if available)
+        messages_node = find_item_by_id(f"{agent_info['agent_id']}_messages", agent_node["children"])
+        if messages_node:
+            messages_node["status"] = "completed"
+            messages_node["content"] = extract_agent_messages(full_state, agent_info["agent_id"])
+    
+    # Update phase status if all agents in phase are completed
+    update_phase_status_if_complete(agent_info["phase"], root_node)
+
+def find_agent_in_tree(agent_id: str, root_node: dict):
+    """Find an agent node in the execution tree."""
+    for phase in root_node["children"]:
+        for agent in phase["children"]:
+            if agent["id"] == agent_id:
+                return agent
+    return None
+
+def find_item_by_id(item_id: str, items: list):
+    """Find an item by ID in a list of items."""
+    for item in items:
+        if item["id"] == item_id:
+            return item
+    return None
+
+def format_report_content(report_name: str, report_data: any) -> str:
+    """Format report data for display."""
+    if isinstance(report_data, str):
+        return f"📄 {report_name}\n\n{report_data}"
+    elif isinstance(report_data, dict):
+        return f"📄 {report_name}\n\n{str(report_data)}"
+    elif isinstance(report_data, list) and report_data:
+        # For debate histories, show the latest message
+        latest = report_data[-1] if report_data else "No data"
+        return f"📄 {report_name}\n\n{str(latest)}"
+    else:
+        return f"📄 {report_name}\n\nReport generated successfully"
+
+def extract_agent_messages(state: dict, agent_id: str) -> str:
+    """Extract relevant messages for an agent from the state."""
+    # This is a simplified version - could be enhanced to extract actual messages
+    messages = state.get("messages", [])
+    if messages:
+        return f"💬 Agent Messages\n\n{len(messages)} messages exchanged during execution"
+    else:
+        return "💬 Agent Messages\n\nExecution completed without specific message logs"
+
+def update_phase_status_if_complete(phase_id: str, root_node: dict):
+    """Update phase status to completed if all its agents are completed."""
+    phase_node = find_item_by_id(f"{phase_id}_phase", root_node["children"])
+    if not phase_node:
+        return
+        
+    # Check if all agents in this phase are completed
+    all_completed = all(agent["status"] == "completed" for agent in phase_node["children"])
+    if all_completed and phase_node["status"] != "completed":
+        phase_node["status"] = "completed"
+        phase_node["content"] = f"✅ {phase_node['name']} - All agents completed successfully"
+
+def count_completed_agents(root_node: dict) -> int:
+    """Count the number of completed agents across all phases."""
+    count = 0
+    for phase in root_node["children"]:
+        for agent in phase["children"]:
+            if agent["status"] == "completed":
+                count += 1
+    return count
 
 def run_trading_process(company_symbol: str, config: Dict[str, Any]):
     """Runs the TradingAgentsGraph in a separate thread."""

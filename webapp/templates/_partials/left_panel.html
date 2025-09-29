@@ -2,7 +2,7 @@
     <li class="process-item status-{{ item.status }}">
         <span hx-get="/content/{{ item.id }}" hx-target="#right-panel" hx-swap="innerHTML" class="item-name clickable">
             <span class="status-icon">
-                {% if item.status == 'completed' %}✓
+                {% if item.status == 'completed' %}✅
                 {% elif item.status == 'in_progress' %}⏳
                 {% elif item.status == 'error' %}❌
                 {% else %}⏸️
@@ -11,7 +11,7 @@
             {{ item.name }}
         </span>
         {% if item.children %}
-            <ul>
+            <ul class="item-children">
                 {% for child in item.children %}
                     {{ render_item(child) }}
                 {% endfor %}
@@ -23,7 +23,7 @@
 <div id="overall-progress-bar" hx-swap-oob="true" style="width:{{ app_state.overall_progress }}%;"></div>
 <span id="overall-progress-text" hx-swap-oob="true">{{ app_state.overall_progress }}% ({{ app_state.overall_status }})</span>
 
-<div id="left-panel-content" hx-get="/status" hx-trigger="every 2s" hx-swap="innerHTML">
+<div id="left-panel-content" hx-get="/status" hx-trigger="every 5s" hx-swap="innerHTML">
     <h2>Execution Status</h2>
     {% if tree %}
         <ul class="execution-tree">
