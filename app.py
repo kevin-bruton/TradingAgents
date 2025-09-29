@@ -27,7 +27,7 @@ def main():
     # Configuration for uvicorn
     config = {
         "app": "webapp.main:app",
-        "host": "0.0.0.0",
+        "host": "localhost",
         "port": 8000,
         "reload": True,  # Enable auto-reload for development
         "reload_dirs": [str(project_root)],  # Watch for changes in project directory
