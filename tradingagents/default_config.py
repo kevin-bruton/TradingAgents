@@ -33,4 +33,8 @@ DEFAULT_CONFIG = {
     # Proxy settings (if needed)
     "http_proxy": os.getenv("HTTP_PROXY"),
     "https_proxy": os.getenv("HTTPS_PROXY"),
+    # LLM resilience settings
+    "llm_max_retries": int(os.getenv("LLM_MAX_RETRIES", "3")),
+    "llm_retry_backoff": float(os.getenv("LLM_RETRY_BACKOFF", "2")),  # seconds exponential base
+    "debug_http": os.getenv("DEBUG_HTTP", "false").lower() in ("1", "true", "yes"),
 }

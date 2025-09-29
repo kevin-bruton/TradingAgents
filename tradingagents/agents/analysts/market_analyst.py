@@ -1,6 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 import json
+from tradingagents.agents.utils.llm_resilience import invoke_with_retries
 
 
 def create_market_analyst(llm, toolkit):
@@ -85,12 +86,22 @@ Bullish and Bearish Candlestick Patterns:
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        # Resilient invocation with retries
+        try:
+            result = invoke_with_retries(chain, state["messages"], toolkit.config)
+        except Exception as e:  # noqa: BLE001
+            # Provide a graceful degraded response so graph can continue / be logged
+            fallback_content = f"Market analyst failed to retrieve a model response after retries. Error: {e}"
+            class DummyResult:
+                def __init__(self, content):
+                    self.content = content
+                    self.tool_calls = []
+            result = DummyResult(fallback_content)
 
         report = ""
 
-        if len(result.tool_calls) == 0:
-            report = result.content
+        if getattr(result, 'tool_calls', []) == []:
+            report = getattr(result, 'content', '')
        
         return {
             "messages": [result],
