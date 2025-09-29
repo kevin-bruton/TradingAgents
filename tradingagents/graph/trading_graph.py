@@ -21,6 +21,7 @@ from tradingagents.agents.utils.agent_states import (
     RiskDebateState,
 )
 from tradingagents.dataflows.interface import set_config
+from tradingagents.dataflows.ssl_utils import setup_global_ssl_config
 
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -50,6 +51,9 @@ class TradingAgentsGraph:
 
         # Update the interface's config
         set_config(self.config)
+        
+        # Set up global SSL configuration
+        setup_global_ssl_config(self.config)
 
         # Create necessary directories
         os.makedirs(
@@ -79,15 +83,48 @@ class TradingAgentsGraph:
                         "export OPENAI_API_KEY=your_openai_key_here"
                     )
             
+            # Prepare SSL configuration for HTTP client - only if explicitly configured
+            http_client_kwargs = {}
+            cert_bundle = self.config.get("ssl_cert_bundle")
+            
+            if cert_bundle and cert_bundle.strip():
+                import httpx
+                http_client_kwargs["verify"] = cert_bundle
+            elif not self.config.get("ssl_verify", True):
+                import httpx
+                http_client_kwargs["verify"] = False
+            
+            if self.config.get("http_timeout"):
+                import httpx
+                http_client_kwargs["timeout"] = self.config["http_timeout"]
+            
+            # Add proxy configuration if specified
+            if self.config.get("http_proxy") or self.config.get("https_proxy"):
+                import httpx
+                proxies = {}
+                if self.config.get("http_proxy"):
+                    proxies["http://"] = self.config["http_proxy"]
+                if self.config.get("https_proxy"):
+                    proxies["https://"] = self.config["https_proxy"]
+                http_client_kwargs["proxies"] = proxies
+            
+            # Create HTTP client only if we have custom settings
+            http_client = None
+            if http_client_kwargs:
+                import httpx
+                http_client = httpx.Client(**http_client_kwargs)
+            
             self.deep_thinking_llm = ChatOpenAI(
                 model=self.config["deep_think_llm"], 
                 base_url=self.config["backend_url"],
-                api_key=api_key
+                api_key=api_key,
+                http_client=http_client
             )
             self.quick_thinking_llm = ChatOpenAI(
                 model=self.config["quick_think_llm"], 
                 base_url=self.config["backend_url"],
-                api_key=api_key
+                api_key=api_key,
+                http_client=http_client
             )
         elif self.config["llm_provider"].lower() == "anthropic":
             self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])
@@ -180,9 +217,19 @@ class TradingAgentsGraph:
                     self.toolkit.get_simfin_income_stmt,
                 ]
             ),
+            "technical": ToolNode(
+                [
+                    # online tools
+                    self.toolkit.get_YFin_data_online,
+                    self.toolkit.get_stockstats_indicators_report_online,
+                    # offline tools
+                    self.toolkit.get_YFin_data,
+                    self.toolkit.get_stockstats_indicators_report,
+                ]
+            ),
         }
 
-    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0):
+    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0, on_step_callback=None):
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
@@ -193,17 +240,14 @@ class TradingAgentsGraph:
         )
         args = self.propagator.get_graph_args()
 
-        if self.debug:
-            # Debug mode with tracing
+        if on_step_callback or self.debug:
+            # Stream mode for callbacks or debug mode
             trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
-                    chunk["messages"][-1].pretty_print()
-                    trace.append(chunk)
-
-            final_state = trace[-1]
+            for s in self.graph.stream(init_agent_state, **args):
+                trace.append(s)
+                if on_step_callback:
+                    on_step_callback(s)
+            final_state = trace[-1] if trace else {}
         else:
             # Standard mode without tracing
             final_state = self.graph.invoke(init_agent_state, **args)

@@ -25,9 +25,12 @@ def create_trader(llm, memory):
         user_position = state.get("user_position", "none")
         cost_per_trade = state.get("cost_per_trade", 0.0)
 
+        stop_loss = state.get("stop_loss")
+        take_profit = state.get("take_profit")
+
         context = {
             "role": "user",
-            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nLeverage these insights to make an informed and strategic decision.",
+            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nThe Trade Planner has proposed a stop-loss of **{stop_loss}** and a take-profit of **{take_profit}**. You must consider these levels in your final recommendation.\n\nLeverage these insights to make an informed and strategic decision.",
         }
 
         messages = [

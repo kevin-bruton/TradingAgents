@@ -1,0 +1,34 @@
+{% macro render_item(item) %}
+    <li class="process-item status-{{ item.status }}" id="item-{{ item.id }}">
+        <div class="item-header">
+            {% if item.children %}
+                <button class="toggle-btn" onclick="toggleNode(this)" aria-label="Toggle children">
+                    <span class="toggle-icon">▶</span>
+                </button>
+            {% else %}
+                <span class="toggle-spacer"></span>
+            {% endif %}
+            <span hx-get="/content/{{ item.id }}" hx-target="#right-panel" hx-swap="innerHTML" class="item-name clickable">
+                <span class="status-icon" id="status-icon-{{ item.id }}">
+                    {% if item.status == 'completed' %}✅
+                    {% elif item.status == 'in_progress' %}⏳
+                    {% elif item.status == 'error' %}❌
+                    {% else %}⏸️
+                    {% endif %}
+                </span>
+                {{ item.name }}
+            </span>
+        </div>
+        {% if item.children %}
+            <ul class="item-children collapsed" id="children-{{ item.id }}">
+                {% for child in item.children %}
+                    {{ render_item(child) }}
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </li>
+{% endmacro %}
+
+{% for item in tree %}
+    {{ render_item(item) }}
+{% endfor %}

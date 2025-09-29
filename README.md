@@ -49,7 +49,7 @@
 
 ## TradingAgents Framework
 
-TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents: from fundamental analysts, sentiment experts, and technical analysts, to trader, risk management team, the platform collaboratively evaluates market conditions and informs trading decisions. Moreover, these agents engage in dynamic discussions to pinpoint the optimal strategy.
+TradingAgents is a multi-agent trading framework that mirrors the dynamics of real-world trading firms. By deploying specialized LLM-powered agents: from fundamental analysts, sentiment experts, and trade planners, to trader, risk management team, the platform collaboratively evaluates market conditions and informs trading decisions. Moreover, these agents engage in dynamic discussions to pinpoint the optimal strategy.
 
 <p align="center">
   <img src="assets/schema.png" style="width: 100%; height: auto;">
@@ -63,7 +63,7 @@ Our framework decomposes complex trading tasks into specialized roles. This ensu
 - Fundamentals Analyst: Evaluates company financials and performance metrics, identifying intrinsic values and potential red flags.
 - Sentiment Analyst: Analyzes social media and public sentiment using sentiment scoring algorithms to gauge short-term market mood.
 - News Analyst: Monitors global news and macroeconomic indicators, interpreting the impact of events on market conditions.
-- Technical Analyst: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
+- Trade Planner: Utilizes technical indicators (like MACD and RSI) to detect trading patterns and forecast price movements.
 
 <p align="center">
   <img src="assets/analyst.png" width="100%" style="display: inline-block; margin: 0 2%;">
@@ -101,15 +101,19 @@ git clone https://github.com/TauricResearch/TradingAgents.git
 cd TradingAgents
 ```
 
-Create a virtual environment in any of your favorite environment managers:
+Create a virtual environment in any of your favorite environment managers. Here are some indications if you've installed `uv`:
 ```bash
-conda create -n tradingagents python=3.13
-conda activate tradingagents
+uv venv
+```
+
+Activate the virtual environment:
+```bash
+venv/Scripts/activate.bat
 ```
 
 Install dependencies:
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
 ### Required APIs
@@ -150,6 +154,32 @@ An interface will appear showing results as they load, letting you track the age
 <p align="center">
   <img src="assets/cli/cli_transaction.png" width="100%" style="display: inline-block; margin: 0 2%;">
 </p>
+
+## Web Frontend (HTMX/FastAPI)
+
+In addition to the CLI, a new web-based frontend is available to visualize the agent communication process in real-time. It allows you to set configuration parameters, start the trading analysis, and observe the step-by-step execution of agents and tools, including their outputs and any errors.
+
+### Running the Web Frontend
+
+1.  Ensure you have installed all dependencies using `uv sync`.
+2.  Navigate to the project root directory in your terminal.
+3.  Start the FastAPI server:
+    ```bash
+    uvicorn webapp.main:app --reload
+    ```
+4.  Open your web browser and go to `http://127.0.0.1:8000`.
+5.  Enter a company symbol (e.g., `AAPL`) in the configuration form and click "Start Process" to begin the analysis.
+
+### Rendered Reports (Markdown Support)
+
+Agent-generated reports (analysis summaries, debate histories, plans, and risk assessments) are produced in Markdown. The web frontend now renders these Markdown documents as styled HTML instead of showing raw markup. This includes support for:
+
+- Headings, emphasis, lists, and blockquotes
+- Tables (for structured metrics)
+- Fenced code blocks and inline code
+
+Security: Markdown is sanitized server‑side using `bleach` to strip unsafe tags/attributes while preserving semantic structure. If you need to extend allowed tags (e.g., to permit additional formatting), modify `ALLOWED_TAGS` / `ALLOWED_ATTRIBUTES` in `webapp/main.py`.
+
 
 ## TradingAgents Package
 

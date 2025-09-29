@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TradingAgents</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body>
+    <div id="overall-progress-container">
+        <div id="overall-progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        <span id="overall-progress-text">0%</span>
+    </div>
+    <div id="main-content">
+        <div id="left-panel">
+            <h2>Configuration</h2>
+            <div id="config-form">
+                <form hx-post="/start" hx-target="#left-panel" hx-swap="innerHTML" hx-indicator="#loading">
+                    <label for="company_symbol">Company Symbol:</label>
+                    <input type="text" id="company_symbol" name="company_symbol" value="AAPL" required>
+                    
+                    <label for="llm_provider">LLM Provider:</label>
+                    <select id="llm_provider" name="llm_provider" onchange="updateModelOptions()" required>
+                        <option value="openai">OpenAI</option>
+                        <option value="openrouter" selected>OpenRouter</option>
+                        <option value="google">Google (Gemini)</option>
+                        <option value="anthropic">Anthropic</option>
+                        <option value="ollama">Ollama</option>
+                    </select>
+                    
+                    <label for="quick_think_llm">Quick Think LLM:</label>
+                    <select id="quick_think_llm" name="quick_think_llm" required>
+                        {% if not app_state.get('config') %}
+                        <option value="x-ai/grok-4-fast:free">xAI: Grok 4 Fast (free)</option>
+                        <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek: DeepSeek V3.1 (free)</option>
+                        <option value="meta-llama/llama-4-scout:free">Meta: Llama 4 Scout</option>
+                        {% endif %}
+                    </select>
+                    
+                    <label for="deep_think_llm">Deep Think LLM:</label>
+                    <select id="deep_think_llm" name="deep_think_llm" required>
+                        {% if not app_state.get('config') %}
+                        <option value="qwen/qwen3-235b-a22b:free">Qwen: Qwen3 235B A22B (free)</option>
+                        <option value="openai/gpt-oss-120b:free">OpenAI: gpt-oss-120b (free)</option>
+                        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 - 685B</option>
+                        {% endif %}
+                    </select>
+                    
+                    <label for="max_debate_rounds">Max Debate Rounds:</label>
+                    <select id="max_debate_rounds" name="max_debate_rounds" required>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                    
+                    <label for="cost_per_trade">Cost Per Trade ($):</label>
+                    <input type="number" id="cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
+                    
+                    <label for="analysis_date">Analysis Date:</label>
+                    <input type="date" id="analysis_date" name="analysis_date" value="{{ default_date }}" required>
+                    
+                    <button type="submit">Start Process</button>
+                    <div id="loading" class="htmx-indicator">Starting process...</div>
+                </form>
+            </div>
+        </div>
+        <div id="right-panel">
+            <p>Welcome! Please set your configuration and start the process.</p>
+            <p>Enter a company symbol (e.g., AAPL, MSFT, GOOGL) and click "Start Process" to begin the trading analysis.</p>
+        </div>
+    </div>
+    
+    <script>
+        // Model options for each provider
+        const modelOptions = {
+            "openai": {
+                "quick": [
+                    { value: "gpt-4o-mini", text: "GPT-4o-mini - Fast and efficient for quick tasks" },
+                    { value: "gpt-4.1-nano", text: "GPT-4.1-nano - Ultra-lightweight model for basic operations" },
+                    { value: "gpt-4.1-mini", text: "GPT-4.1-mini - Compact model with good performance" },
+                    { value: "gpt-4o", text: "GPT-4o - Standard model with solid capabilities" }
+                ],
+                "deep": [
+                    { value: "gpt-4.1-nano", text: "GPT-4.1-nano - Ultra-lightweight model for basic operations" },
+                    { value: "gpt-4.1-mini", text: "GPT-4.1-mini - Compact model with good performance" },
+                    { value: "gpt-4o", text: "GPT-4o - Standard model with solid capabilities" },
+                    { value: "o4-mini", text: "o4-mini - Specialized reasoning model (compact)" },
+                    { value: "o3-mini", text: "o3-mini - Advanced reasoning model (lightweight)" },
+                    { value: "o3", text: "o3 - Full advanced reasoning model" },
+                    { value: "o1", text: "o1 - Premier reasoning and problem-solving model" }
+                ]
+            },
+            "openrouter": {
+                "quick": [
+                    { value: "x-ai/grok-4-fast:free", text: "xAI: Grok 4 Fast (free)" },
+                    { value: "deepseek/deepseek-chat-v3.1:free", text: "DeepSeek: DeepSeek V3.1 (free)" },
+                    { value: "z-ai/glm-4-32b", text: "Z.AI: GLM 4 32B" },
+                    { value: "meta-llama/llama-4-scout:free", text: "Meta: Llama 4 Scout" },
+                    { value: "meta-llama/llama-3.3-8b-instruct:free", text: "Meta: Llama 3.3 8B Instruct" },
+                    { value: "google/gemini-2.0-flash-exp:free", text: "Google: Gemini 2.0 Flash (free)" }
+                ],
+                "deep": [
+                    { value: "qwen/qwen3-235b-a22b:free", text: "Qwen: Qwen3 235B A22B (free)" },
+                    { value: "openai/gpt-oss-120b:free", text: "OpenAI: gpt-oss-120b (free)" },
+                    { value: "z-ai/glm-4-32b", text: "Z.AI: GLM 4 32B" },
+                    { value: "deepseek/deepseek-chat-v3-0324:free", text: "DeepSeek V3 - 685B-parameter model" }
+                ]
+            },
+            "google": {
+                "quick": [
+                    { value: "gemini-2.0-flash-lite", text: "Gemini 2.0 Flash-Lite - Cost efficiency and low latency" },
+                    { value: "gemini-2.0-flash", text: "Gemini 2.0 Flash - Next generation features, speed, and thinking" },
+                    { value: "gemini-2.5-flash-preview-05-20", text: "Gemini 2.5 Flash - Adaptive thinking, cost efficiency" }
+                ],
+                "deep": [
+                    { value: "gemini-2.0-flash-lite", text: "Gemini 2.0 Flash-Lite - Cost efficiency and low latency" },
+                    { value: "gemini-2.0-flash", text: "Gemini 2.0 Flash - Next generation features, speed, and thinking" },
+                    { value: "gemini-2.5-flash-preview-05-20", text: "Gemini 2.5 Flash - Adaptive thinking, cost efficiency" },
+                    { value: "gemini-2.5-pro-preview-06-05", text: "Gemini 2.5 Pro" }
+                ]
+            },
+            "anthropic": {
+                "quick": [
+                    { value: "claude-3-5-haiku-latest", text: "Claude Haiku 3.5 - Fast inference and standard capabilities" },
+                    { value: "claude-3-5-sonnet-latest", text: "Claude Sonnet 3.5 - Highly capable standard model" },
+                    { value: "claude-3-7-sonnet-latest", text: "Claude Sonnet 3.7 - Exceptional hybrid reasoning" },
+                    { value: "claude-sonnet-4-0", text: "Claude Sonnet 4 - High performance and excellent reasoning" }
+                ],
+                "deep": [
+                    { value: "claude-3-5-haiku-latest", text: "Claude Haiku 3.5 - Fast inference and standard capabilities" },
+                    { value: "claude-3-5-sonnet-latest", text: "Claude Sonnet 3.5 - Highly capable standard model" },
+                    { value: "claude-3-7-sonnet-latest", text: "Claude Sonnet 3.7 - Exceptional hybrid reasoning" },
+                    { value: "claude-sonnet-4-0", text: "Claude Sonnet 4 - High performance and excellent reasoning" },
+                    { value: "claude-opus-4-0", text: "Claude Opus 4 - Most powerful Anthropic model" }
+                ]
+            },
+            "ollama": {
+                "quick": [
+                    { value: "granite3.3:2b", text: "Granite 3.3 2B" },
+                    { value: "llama3.1", text: "llama3.1 local" },
+                    { value: "llama3.2", text: "llama3.2 local" }
+                ],
+                "deep": [
+                    { value: "granite3.3:2b", text: "Granite 3.3 2B" },
+                    { value: "llama3.1", text: "llama3.1 local" },
+                    { value: "qwen3", text: "qwen3" }
+                ]
+            }
+        };
+
+        function updateModelOptions() {
+            const provider = document.getElementById('llm_provider').value;
+            const quickSelect = document.getElementById('quick_think_llm');
+            const deepSelect = document.getElementById('deep_think_llm');
+            
+            // Clear existing options
+            quickSelect.innerHTML = '';
+            deepSelect.innerHTML = '';
+            
+            // Populate quick think options
+            if (modelOptions[provider] && modelOptions[provider].quick) {
+                modelOptions[provider].quick.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.value;
+                    option.textContent = model.text;
+                    quickSelect.appendChild(option);
+                });
+            }
+            
+            // Populate deep think options
+            if (modelOptions[provider] && modelOptions[provider].deep) {
+                modelOptions[provider].deep.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model.value;
+                    option.textContent = model.text;
+                    deepSelect.appendChild(option);
+                });
+            }
+        }
+
+        // Set current date as default for analysis_date
+        function setCurrentDate() {
+            const el = document.getElementById('analysis_date');
+            if (el && !el.value) { // only set if not already provided by server
+                const today = new Date();
+                const dateString = today.toISOString().split('T')[0];
+                el.value = dateString;
+            }
+        }
+
+        // Toggle node functionality for collapsible tree
+        function toggleNode(button) {
+            const li = button.closest('li.process-item');
+            const children = li ? li.querySelector(':scope > .item-children') : null;
+            if (!children) return;
+            const isExpanded = children.classList.contains('expanded');
+            if (isExpanded) {
+                children.classList.remove('expanded');
+                children.classList.add('collapsed');
+                button.classList.remove('expanded');
+                button.setAttribute('aria-expanded', 'false');
+            } else {
+                children.classList.remove('collapsed');
+                children.classList.add('expanded');
+                button.classList.add('expanded');
+                button.setAttribute('aria-expanded', 'true');
+            }
+        }
+
+        // Save the current expansion state of all toggleable items
+        function saveExpansionState() {
+            const state = {};
+            const executionTree = document.querySelector('.execution-tree');
+            if (executionTree) {
+                const items = executionTree.querySelectorAll('.process-item');
+                items.forEach(item => {
+                    const children = item.querySelector('.item-children');
+                    const button = item.querySelector('.toggle-btn');
+                    if (children && button) {
+                        const itemId = getItemId(item);
+                        if (itemId) {
+                            state[itemId] = children.classList.contains('expanded');
+                        }
+                    }
+                });
+            }
+            return state;
+        }
+
+        // Restore the expansion state after content update
+        function restoreExpansionState(savedState) {
+            if (!savedState) return;
+            
+            const executionTree = document.querySelector('.execution-tree');
+            if (executionTree) {
+                const items = executionTree.querySelectorAll('.process-item');
+                items.forEach(item => {
+                    const children = item.querySelector('.item-children');
+                    const button = item.querySelector('.toggle-btn');
+                    if (children && button) {
+                        const itemId = getItemId(item);
+                        if (itemId && savedState.hasOwnProperty(itemId)) {
+                            if (savedState[itemId]) {
+                                // Expand
+                                children.classList.remove('collapsed');
+                                children.classList.add('expanded');
+                                button.classList.add('expanded');
+                            } else {
+                                // Collapse
+                                children.classList.remove('expanded');
+                                children.classList.add('collapsed');
+                                button.classList.remove('expanded');
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // Get item ID from the clickable span
+        function getItemId(processItem) {
+            const clickableSpan = processItem.querySelector('.item-name.clickable');
+            if (clickableSpan) {
+                const hxGet = clickableSpan.getAttribute('hx-get');
+                if (hxGet) {
+                    const match = hxGet.match(/\/content\/(.+)$/);
+                    return match ? match[1] : null;
+                }
+            }
+            return null;
+        }
+
+        // Handle HTMX before request to save state
+        document.addEventListener('htmx:beforeSwap', function(event) {
+                if (event.target.id === 'left-panel') {
+                window.savedExpansionState = saveExpansionState();
+            }
+        });
+
+        // Handle HTMX after settle to restore state
+            document.addEventListener('htmx:afterSettle', function(event) {
+                if (event.target.id === 'left-panel' && window.savedExpansionState) {
+                restoreExpansionState(window.savedExpansionState);
+            }
+        });
+
+        // Targeted status updates to prevent flickering
+        function updateStatusIndicators() {
+            fetch('/status-updates')
+                .then(response => response.json())
+                .then(data => {
+                    // Update overall progress
+                    const progressBar = document.getElementById('overall-progress-bar');
+                    const progressText = document.getElementById('overall-progress-text');
+                    if (progressBar) {
+                        progressBar.style.width = data.overall_progress + '%';
+                    }
+                    if (progressText) {
+                        progressText.textContent = data.overall_progress + '% (' + data.overall_status + ')';
+                    }
+
+                    // Update individual status icons
+                    for (const [itemId, statusInfo] of Object.entries(data.status_updates)) {
+                        const statusIcon = document.querySelector(`[hx-get="/content/${itemId}"] .status-icon`);
+                        if (statusIcon && statusIcon.textContent !== statusInfo.status_icon) {
+                            statusIcon.textContent = statusInfo.status_icon;
+                            
+                            // Update the parent item's CSS class
+                            const processItem = statusIcon.closest('.process-item');
+                            if (processItem) {
+                                // Remove old status classes
+                                processItem.classList.remove('status-pending', 'status-in_progress', 'status-completed', 'status-error');
+                                // Add new status class
+                                processItem.classList.add('status-' + statusInfo.status);
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.log('Status update failed:', error);
+                });
+        }
+
+        // Start targeted updates when execution tree is present
+        function startTargetedUpdates() {
+            const tree = document.querySelector('.execution-tree');
+            if (!tree) return;
+            if (!window.statusUpdateInterval) {
+                console.debug('[status] starting interval');
+                window.statusUpdateInterval = setInterval(updateStatusIndicators, 2000);
+            }
+        }
+
+        // Stop targeted updates
+        function stopTargetedUpdates() {
+            if (window.statusUpdateInterval) {
+                clearInterval(window.statusUpdateInterval);
+                window.statusUpdateInterval = null;
+            }
+        }
+
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            setCurrentDate();
+            updateModelOptions(); // Set initial model options for OpenRouter
+            
+            // Start targeted updates if execution tree is already present
+            startTargetedUpdates();
+        });
+
+        // Handle when new content is loaded (like when starting a process)
+        document.addEventListener('htmx:afterSettle', function(event) {
+                if (event.target.id === 'left-panel') {
+                if (window.savedExpansionState) {
+                    restoreExpansionState(window.savedExpansionState);
+                }
+                // Start or restart targeted updates when new content is loaded
+                stopTargetedUpdates();
+                startTargetedUpdates();
+            }
+        });
+    </script>
+</body>
+</html>

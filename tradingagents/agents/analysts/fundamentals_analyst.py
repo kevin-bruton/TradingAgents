@@ -1,6 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 import json
+from tradingagents.agents.utils.llm_resilience import invoke_with_retries
 
 
 def create_fundamentals_analyst(llm, toolkit):
@@ -21,8 +22,15 @@ def create_fundamentals_analyst(llm, toolkit):
             ]
 
         system_message = (
-            "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, company financial history, insider sentiment and insider transactions to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."
-            + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read.",
+            "You are a researcher tasked with analyzing fundamental information over the past week about a company. "
+            "Please write a comprehensive report of the company's fundamental information such as "
+            "financial documents, company profile, basic company financials, company financial history, "
+            "insider sentiment and insider transactions to gain a full view of the company's fundamental information to inform traders. "
+            "Make sure to include as much detail as possible. "
+            "Do not simply state the trends are mixed. "
+            "Provide detailed and finegrained analysis and insights that may help traders make decisions. "
+            "Make sure to append a Markdown table at the end of the report to organize key points in the report, "
+            "organized and easy to read.",
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -48,13 +56,19 @@ def create_fundamentals_analyst(llm, toolkit):
         prompt = prompt.partial(ticker=ticker)
 
         chain = prompt | llm.bind_tools(tools)
-
-        result = chain.invoke(state["messages"])
+        try:
+            result = invoke_with_retries(chain, state["messages"], toolkit.config)
+        except Exception as e:  # noqa: BLE001
+            class DummyResult:
+                def __init__(self, content):
+                    self.content = content
+                    self.tool_calls = []
+            result = DummyResult(f"Fundamentals analyst failed after retries. Error: {e}")
 
         report = ""
 
-        if len(result.tool_calls) == 0:
-            report = result.content
+        if getattr(result, 'tool_calls', []) == []:
+            report = getattr(result, 'content', '')
 
         return {
             "messages": [result],

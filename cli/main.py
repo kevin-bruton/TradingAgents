@@ -788,7 +788,12 @@ def run_analysis():
     config["llm_provider"] = selections["llm_provider"].lower()
     config["user_position"] = selections["user_position"]
     config["cost_per_trade"] = selections["cost_per_trade"]
-
+    
+    print("\nConfiguration:")
+    for key, value in config.items():
+        print(f"  {key}: {value}")
+    print("")
+        
     # Initialize the graph
     graph = TradingAgentsGraph(
         [analyst.value for analyst in selections["analysts"]], config=config, debug=True

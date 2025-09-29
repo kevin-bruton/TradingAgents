@@ -1,0 +1,544 @@
+/* Dark theme variables */
+:root {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #242424;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --accent-color: #4CAF50;
+    --border-color: #333;
+    --input-bg: #2a2a2a;
+    --hover-color: #333;
+}
+
+/* Basic styles for the webapp */
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    margin: 0;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+#left-panel {
+    width: 30%;
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+    background-color: var(--bg-secondary);
+}
+
+#right-panel {
+    width: 70%;
+    padding: 20px;
+    overflow-y: auto;
+    background-color: var(--bg-primary);
+}
+
+/* Overall Progress Bar */
+#overall-progress-container {
+    width: 100%;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    padding: 10px 20px;
+    box-sizing: border-box;
+}
+
+#overall-progress-bar {
+    height: 6px;
+    background-color: var(--accent-color);
+    width: 0%; /* Initial width */
+    transition: width 0.5s ease-in-out, background-color 0.3s ease;
+    border-radius: 3px;
+    box-shadow: 0 0 10px rgba(76, 175, 80, 0.3);
+}
+
+#overall-progress-text {
+    margin-left: 15px;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+/* Main Content Layout */
+#main-content {
+    display: flex;
+    flex-grow: 1;
+    height: calc(100vh - 46px); /* Adjust for progress bar height */
+    background-color: var(--bg-primary);
+}
+
+/* Left Panel - Configuration and Controls */
+#left-panel {
+    width: 30%;
+    border-right: 1px solid var(--border-color);
+    padding: 20px;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background-color: var(--bg-secondary);
+}
+
+#left-panel h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+    font-size: 1.5em;
+    font-weight: 600;
+}
+
+#config-form {
+    background-color: var(--bg-primary);
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#config-form label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 0.9em;
+}
+
+#config-form input,
+#config-form select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 1em;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    box-sizing: border-box;
+}
+
+#config-form input:focus,
+#config-form select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+/* Specific styling for select dropdowns */
+#config-form select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6,9 12,15 18,9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 16px;
+    padding-right: 40px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+#config-form select option {
+    background-color: var(--input-bg);
+    color: var(--text-primary);
+    padding: 8px;
+}
+
+#config-form button {
+    width: 100%;
+    padding: 12px;
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 1em;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#config-form button:hover {
+    background-color: #45a049;
+    transform: translateY(-1px);
+}
+
+#config-form button:active {
+    transform: translateY(0);
+}
+
+#left-panel ul {
+    list-style: none;
+    padding-left: 15px;
+    margin-top: 20px;
+}
+
+#left-panel li {
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+#left-panel li .item-name {
+    padding: 8px 12px;
+    border-radius: 4px;
+    display: inline-block;
+    transition: background-color 0.2s ease;
+}
+
+#left-panel li .item-name:hover {
+    background-color: var(--hover-color);
+}
+
+/* Status Indicators */
+.status-pending .item-name {
+    color: var(--text-secondary);
+    border-left: 3px solid var(--text-secondary);
+    padding-left: 10px;
+}
+
+.status-in_progress .item-name {
+    color: #3b82f6;
+    font-weight: 600;
+    border-left: 3px solid #3b82f6;
+    padding-left: 10px;
+    animation: pulse 2s infinite;
+}
+
+.status-completed .item-name {
+    color: var(--accent-color);
+    border-left: 3px solid var(--accent-color);
+    padding-left: 10px;
+}
+
+.status-error .item-name {
+    color: #ef4444;
+    font-weight: 600;
+    border-left: 3px solid #ef4444;
+    padding-left: 10px;
+}
+
+/* Right Panel Styles */
+#right-panel {
+    padding: 30px;
+}
+
+#right-panel p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 1.1em;
+}
+
+/* Execution Tree Styles */
+.execution-tree {
+    margin-top: 20px;
+}
+
+.execution-tree ul {
+    margin-left: 20px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 15px;
+}
+
+.item-children {
+    margin-left: 20px;
+    border-left: 2px solid var(--border-color);
+    padding-left: 15px;
+    margin-top: 8px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+/* Collapsed state - hide children by default */
+.item-children.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Expanded state */
+.item-children.expanded {
+    max-height: 1000px; /* Large enough to accommodate content */
+    opacity: 1;
+}
+
+.process-item {
+    position: relative;
+    margin-bottom: 5px;
+}
+
+.process-item::before {
+    content: '';
+    position: absolute;
+    left: -18px;
+    top: 12px;
+    width: 8px;
+    height: 2px;
+    background-color: var(--border-color);
+}
+
+/* Item header container */
+.item-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Toggle button styles */
+.toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    transition: all 0.2s ease;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.toggle-btn:hover {
+    background-color: var(--hover-color);
+    color: var(--text-primary);
+    transform: scale(1.1);
+}
+
+/* Remove default focus highlight on mouse focus but keep accessible outline for keyboard users */
+.toggle-btn:focus {
+    outline: none;
+}
+.toggle-btn:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Toggle icon rotation */
+.toggle-icon {
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+.toggle-btn.expanded .toggle-icon {
+    transform: rotate(90deg);
+}
+
+/* Spacer for items without children */
+.toggle-spacer {
+    width: 20px;
+    height: 20px;
+    display: inline-block;
+}
+
+.clickable {
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clickable:hover {
+    transform: translateX(3px);
+}
+
+.status-icon {
+    margin-right: 8px;
+    font-size: 0.9em;
+    transition: all 0.3s ease;
+    display: inline-block;
+}
+
+/* Specific styling for different item types */
+.process-item[class*="_phase"] .item-name {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: var(--text-primary);
+}
+
+.process-item[class*="analyst"] .item-name,
+.process-item[class*="researcher"] .item-name,
+.process-item[class*="planner"] .item-name,
+.process-item[class*="trader"] .item-name,
+.process-item[class*="judge"] .item-name {
+    font-weight: 500;
+    color: var(--text-primary);
+    padding-left: 8px;
+}
+
+.process-item[class*="_report"] .item-name,
+.process-item[class*="_messages"] .item-name {
+    font-size: 0.9em;
+    color: var(--text-secondary);
+    font-style: italic;
+    padding-left: 16px;
+}
+
+/* Loading indicator */
+.htmx-indicator {
+    display: none;
+    color: var(--accent-color);
+    font-size: 0.9em;
+    margin-top: 10px;
+    animation: pulse 2s infinite;
+}
+
+.htmx-request .htmx-indicator {
+    display: block;
+}
+
+/* Content display improvements */
+#right-panel pre {
+    background-color: var(--bg-secondary);
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    font-size: 0.9em;
+    line-height: 1.4;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Markdown content styling */
+.markdown-body {
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+    margin-top: 1.2em;
+}
+.markdown-body code {
+    background: var(--bg-secondary);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+.markdown-body pre code {
+    display: block;
+    padding: 12px;
+    overflow-x: auto;
+}
+
+/* Expandable message boxes for Messages view */
+details.message-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    padding: 6px 10px;
+}
+
+details.message-box > summary {
+    cursor: pointer;
+    font-weight: 600;
+    list-style: none;
+}
+
+details.message-box > summary::-webkit-details-marker {
+    display: none;
+}
+
+details.message-box[open] {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.25);
+}
+
+pre.message-content {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 10px;
+    margin: 8px 0 4px 0;
+    max-height: 400px;
+    overflow: auto;
+    font-size: 0.85rem;
+}
+.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+.markdown-body th, .markdown-body td {
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    text-align: left;
+}
+.markdown-body blockquote {
+    border-left: 4px solid var(--accent-color);
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
+#right-panel h3 {
+    color: var(--text-primary);
+    margin-bottom: 15px;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+/* Animations */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* -------------------------------------------------- */
+/* Custom Scrollbars (Dark Theme)                    */
+/* -------------------------------------------------- */
+/* WebKit Browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(var(--hover-color), var(--bg-primary));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(#3a3a3a, var(--hover-color));
+}
+
+::-webkit-scrollbar-corner {
+    background: var(--bg-secondary);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hover-color) var(--bg-secondary);
+}
+
+/* Make pre/code blocks and panels consistent */
+#left-panel, #right-panel, pre, .item-children, pre.message-content {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hover-color) var(--bg-secondary);
+}
+
+/* Reduced motion preference: simplify visuals */
+@media (prefers-reduced-motion: reduce) {
+    ::-webkit-scrollbar-thumb {
+        box-shadow: none;
+    }
+}

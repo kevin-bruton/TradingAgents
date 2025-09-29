@@ -1,6 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 import json
+from tradingagents.agents.utils.llm_resilience import invoke_with_retries
 
 
 def create_news_analyst(llm, toolkit):
@@ -45,12 +46,19 @@ def create_news_analyst(llm, toolkit):
         prompt = prompt.partial(ticker=ticker)
 
         chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
+        try:
+            result = invoke_with_retries(chain, state["messages"], toolkit.config)
+        except Exception as e:  # noqa: BLE001
+            class DummyResult:
+                def __init__(self, content):
+                    self.content = content
+                    self.tool_calls = []
+            result = DummyResult(f"News analyst failed after retries. Error: {e}")
 
         report = ""
 
-        if len(result.tool_calls) == 0:
-            report = result.content
+        if getattr(result, 'tool_calls', []) == []:
+            report = getattr(result, 'content', '')
 
         return {
             "messages": [result],

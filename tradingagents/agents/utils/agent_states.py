@@ -76,3 +76,5 @@ class AgentState(MessagesState):
         RiskDebateState, "Current state of the debate on evaluating risk"
     ]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
+    stop_loss: Annotated[Optional[float], "Stop loss price level"] = None
+    take_profit: Annotated[Optional[float], "Take profit price level"] = None
