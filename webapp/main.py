@@ -50,8 +50,21 @@ jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
 def update_execution_state(state: Dict[str, Any]):
     """Callback function to update the app_state based on LangGraph's state."""
     with app_state_lock:
-        # Initialize the root node if it doesn't exist
-        if not app_state["execution_tree"]:
+        # Check if we're still in initialization phase and need to transition to actual execution
+        if (app_state["execution_tree"] and 
+            len(app_state["execution_tree"]) == 1 and 
+            app_state["execution_tree"][0]["id"] == "initialization"):
+            # Replace initialization message with the main execution tree
+            app_state["execution_tree"] = [{
+                "id": "root",
+                "name": f"Trading Analysis for {app_state['company_symbol']}",
+                "status": "in_progress",
+                "content": f"Analyzing {app_state['company_symbol']} using multiple trading agents\n\nThe trading analysis pipeline has been successfully initialized and agents are now executing their tasks.",
+                "children": [],
+                "timestamp": time.time()
+            }]
+        elif not app_state["execution_tree"]:
+            # Fallback: Initialize the root node if it doesn't exist
             app_state["execution_tree"].append({
                 "id": "root",
                 "name": f"Trading Analysis for {app_state['company_symbol']}",
@@ -259,9 +272,8 @@ async def start_process(
 
         app_state["process_running"] = True
         app_state["company_symbol"] = company_symbol
-        app_state["execution_tree"] = [] # Clear for new run
         app_state["overall_status"] = "in_progress"
-        app_state["overall_progress"] = 0
+        app_state["overall_progress"] = 5  # Show initial progress
         
         # Store all configuration parameters
         app_state["config"] = {
@@ -272,6 +284,16 @@ async def start_process(
             "cost_per_trade": cost_per_trade,
             "analysis_date": analysis_date
         }
+        
+        # Initialize execution tree with startup message
+        app_state["execution_tree"] = [{
+            "id": "initialization",
+            "name": f"🚀 Initializing Trading Analysis for {company_symbol}",
+            "status": "in_progress",
+            "content": f"Starting comprehensive trading analysis for {company_symbol}...\n\nConfiguration:\n• LLM Provider: {llm_provider}\n• Quick Think Model: {quick_think_llm}\n• Deep Think Model: {deep_think_llm}\n• Max Debate Rounds: {max_debate_rounds}\n• Cost Per Trade: ${cost_per_trade}\n• Analysis Date: {analysis_date}\n\nInitializing trading agents and preparing analysis pipeline...",
+            "children": [],
+            "timestamp": time.time()
+        }]
 
     background_tasks.add_task(run_trading_process, company_symbol, app_state["config"])
     
