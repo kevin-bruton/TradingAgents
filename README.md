@@ -159,6 +159,16 @@ An interface will appear showing results as they load, letting you track the age
 
 In addition to the CLI, a new web-based frontend is available to visualize the agent communication process in real-time. It allows you to set configuration parameters, start the trading analysis, and observe the step-by-step execution of agents and tools, including their outputs and any errors.
 
+### New: User Position Awareness
+
+You can now optionally specify your current position (None / Long / Short) along with existing stop-loss and take-profit levels. These inputs are incorporated by the Trade Planner and Risk / Portfolio Manager to:
+ - Decide whether to maintain, adjust, or close the current position
+ - Recommend flipping (e.g., long -> short) only when risk/reward justifies transaction costs
+ - Adjust existing stop-loss / take-profit levels (tighten, widen, trail, move to breakeven)
+ - Avoid unnecessary churn when changes would not exceed the trading cost threshold
+
+If you leave these fields blank or select "No Open Position", the system will generate fresh trade planning levels as usual.
+
 ### Running the Web Frontend
 
 1.  Ensure you have installed all dependencies using `uv sync`.
@@ -169,6 +179,7 @@ In addition to the CLI, a new web-based frontend is available to visualize the a
     ```
 4.  Open your web browser and go to `http://127.0.0.1:8000`.
 5.  Enter a company symbol (e.g., `AAPL`) in the configuration form and click "Start Process" to begin the analysis.
+6.  (Optional) If you have an open position, select Long/Short and enter existing stop-loss / take-profit so the final decision can include management guidance.
 
 ### Rendered Reports (Markdown Support)
 

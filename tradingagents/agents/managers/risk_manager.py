@@ -4,7 +4,6 @@ import json
 
 def create_risk_manager(llm, memory):
     def risk_manager_node(state) -> dict:
-
         company_name = state["company_of_interest"]
 
         history = state["risk_debate_state"]["history"]
@@ -16,6 +15,8 @@ def create_risk_manager(llm, memory):
         trader_plan = state["investment_plan"]
         stop_loss = state.get("stop_loss")
         take_profit = state.get("take_profit")
+        existing_sl = state.get("current_position_stop_loss")
+        existing_tp = state.get("current_position_take_profit")
 
         curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
@@ -41,10 +42,11 @@ Guidelines for Decision-Making:
 2. **Provide Rationale**: Support your recommendation with direct quotes and counterarguments from the debate.
 3. **Refine the Trader's Plan**: Start with the trader's original plan, **{trader_plan}**, and adjust it based on the analysts' insights.
 4. **Incorporate Technical Analysis**: The Trade Planner has proposed a stop-loss of **{stop_loss}** and a take-profit of **{take_profit}**. You must consider these levels in your final recommendation.
+5. **Existing Position Levels (if any)**: The user's current position management levels are stop-loss **{existing_sl}** and take-profit **{existing_tp}**. If the user already has levels and they materially differ from new recommendations, clearly state whether to adjust them (tighten, loosen, move to breakeven, trail, etc.) and why.
 5. **Learn from Past Mistakes**: Use lessons from **{past_memory_str}** to address prior misjudgments and improve the decision you are making now to make sure you don't make a wrong decision that loses money.
 
 Deliverables:
-- A clear and actionable recommendation.
+- A clear and actionable recommendation explicitly stating: maintain/close/flip position (or open new), any adjustments to stop-loss / take-profit (include both old and new if changed), and risk management rationale.
 - Detailed reasoning anchored in the debate and past reflections.
 
 ---
@@ -55,9 +57,8 @@ Deliverables:
 ---
 
 Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
-
         response = llm.invoke(prompt)
-        
+
         final_decision_content = response.content
         new_risk_debate_state = {
             "judge_decision": response.content,

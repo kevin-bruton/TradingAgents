@@ -16,6 +16,10 @@ def create_trade_planner_agent(llm, toolkit):
                 toolkit.get_stockstats_indicators_report,
             ]
 
+        existing_sl = state.get("current_position_stop_loss")
+        existing_tp = state.get("current_position_take_profit")
+        user_position = state.get("user_position", "none")
+
         prompt = f'''You are a trade planner. Your role is to determine the stop-loss and take-profit levels for a given investment plan.
 
 Analyze the following market report and investment plan to determine the optimal stop-loss and take-profit levels. You should use the available tools to get the latest market data and calculate technical indicators.
@@ -28,6 +32,8 @@ Analyze the following market report and investment plan to determine the optimal
 
 Use technical indicators such as Pivots, ATR, support and resistance levels, Donchian Channels, SuperTrend, etc., as well as risk factors to determine the stop-loss and take-profit levels.
 
+If the user already has an open position (user_position = {user_position}) and existing management levels (stop_loss={existing_sl}, take_profit={existing_tp}), evaluate whether to keep, tighten, widen, trail, or remove them. Only change existing levels if your analysis strongly supports it. If no position is open, propose initial levels suitable for a new trade.
+
 Based on your analysis, provide the stop-loss and take-profit levels in a JSON format. For example:
 {{
     "stop_loss": 150.00,
@@ -39,7 +45,7 @@ Do not provide any other information or explanation.
 '''
 
         response = llm.invoke(prompt)
-        
+
         try:
             levels = json.loads(response.content)
             stop_loss = levels.get("stop_loss")
