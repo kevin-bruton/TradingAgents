@@ -398,6 +398,45 @@ body {
     word-wrap: break-word;
 }
 
+/* Markdown content styling */
+.markdown-body {
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 0.3em;
+    margin-top: 1.2em;
+}
+.markdown-body code {
+    background: var(--bg-secondary);
+    padding: 2px 5px;
+    border-radius: 4px;
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+}
+.markdown-body pre code {
+    display: block;
+    padding: 12px;
+    overflow-x: auto;
+}
+.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1em 0;
+}
+.markdown-body th, .markdown-body td {
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    text-align: left;
+}
+.markdown-body blockquote {
+    border-left: 4px solid var(--accent-color);
+    margin: 1em 0;
+    padding: 0.5em 1em;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+
 #right-panel h3 {
     color: var(--text-primary);
     margin-bottom: 15px;

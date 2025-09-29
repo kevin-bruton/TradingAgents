@@ -37,4 +37,6 @@ dependencies = [
     "uvicorn",
     "python-multipart",
     "jinja2",
+    "markdown>=3.6",
+    "bleach>=6.1.0",
 ]

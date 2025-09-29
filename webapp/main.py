@@ -2,6 +2,8 @@ from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import jinja2
+import markdown as md
+import bleach
 import os
 from typing import Dict, Any
 import threading
@@ -55,6 +57,26 @@ app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
 # Setup Jinja2 for templating
 template_dir = os.path.join(os.path.dirname(__file__), "templates")
 jinja_env = jinja2.Environment(loader=jinja2.FileSystemLoader(template_dir))
+
+# Allowed tags and attributes for sanitized markdown rendering
+ALLOWED_TAGS = list(bleach.sanitizer.ALLOWED_TAGS) + [
+    "p", "pre", "span", "h1", "h2", "h3", "h4", "h5", "h6", "table", "thead", "tbody", "tr", "th", "td", "blockquote", "code"
+]
+ALLOWED_ATTRIBUTES = {**bleach.sanitizer.ALLOWED_ATTRIBUTES, "span": ["class"], "code": ["class"], "th": ["align"], "td": ["align"]}
+
+def render_markdown(value: str) -> str:
+    """Convert markdown text to sanitized HTML."""
+    if not isinstance(value, str):
+        value = str(value)
+    html = md.markdown(
+        value,
+        extensions=["fenced_code", "tables", "codehilite", "toc", "sane_lists"],
+        output_format="html5"
+    )
+    cleaned = bleach.clean(html, tags=ALLOWED_TAGS, attributes=ALLOWED_ATTRIBUTES, strip=True)
+    return cleaned
+
+jinja_env.filters['markdown'] = render_markdown
 
 def update_execution_state(state: Dict[str, Any]):
     """Callback function to update the app_state based on LangGraph's state."""

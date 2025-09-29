@@ -1,4 +1,4 @@
 <div>
     <h3>Content Details</h3>
-    <pre>{{ content }}</pre>
+    <div class="markdown-body">{{ content | markdown | safe }}</div>
 </div>

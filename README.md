@@ -170,6 +170,17 @@ In addition to the CLI, a new web-based frontend is available to visualize the a
 4.  Open your web browser and go to `http://127.0.0.1:8000`.
 5.  Enter a company symbol (e.g., `AAPL`) in the configuration form and click "Start Process" to begin the analysis.
 
+### Rendered Reports (Markdown Support)
+
+Agent-generated reports (analysis summaries, debate histories, plans, and risk assessments) are produced in Markdown. The web frontend now renders these Markdown documents as styled HTML instead of showing raw markup. This includes support for:
+
+- Headings, emphasis, lists, and blockquotes
+- Tables (for structured metrics)
+- Fenced code blocks and inline code
+
+Security: Markdown is sanitized server‑side using `bleach` to strip unsafe tags/attributes while preserving semantic structure. If you need to extend allowed tags (e.g., to permit additional formatting), modify `ALLOWED_TAGS` / `ALLOWED_ATTRIBUTES` in `webapp/main.py`.
+
+
 ## TradingAgents Package
 
 ### Implementation Details
