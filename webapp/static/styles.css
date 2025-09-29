@@ -243,6 +243,22 @@ body {
     border-left: 2px solid var(--border-color);
     padding-left: 15px;
     margin-top: 8px;
+    overflow: hidden;
+    transition: max-height 0.3s ease-in-out, opacity 0.2s ease-in-out;
+}
+
+/* Collapsed state - hide children by default */
+.item-children.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* Expanded state */
+.item-children.expanded {
+    max-height: 1000px; /* Large enough to accommodate content */
+    opacity: 1;
 }
 
 .process-item {
@@ -258,6 +274,59 @@ body {
     width: 8px;
     height: 2px;
     background-color: var(--border-color);
+}
+
+/* Item header container */
+.item-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Toggle button styles */
+.toggle-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    transition: all 0.2s ease;
+    font-size: 10px;
+    line-height: 1;
+}
+
+.toggle-btn:hover {
+    background-color: var(--hover-color);
+    color: var(--text-primary);
+    transform: scale(1.1);
+}
+
+.toggle-btn:focus {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+}
+
+/* Toggle icon rotation */
+.toggle-icon {
+    transition: transform 0.2s ease;
+    display: inline-block;
+}
+
+.toggle-btn.expanded .toggle-icon {
+    transform: rotate(90deg);
+}
+
+/* Spacer for items without children */
+.toggle-spacer {
+    width: 20px;
+    height: 20px;
+    display: inline-block;
 }
 
 .clickable {

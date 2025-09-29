@@ -183,6 +183,26 @@
             document.getElementById('analysis_date').value = dateString;
         }
 
+        // Toggle node functionality for collapsible tree
+        function toggleNode(button) {
+            const children = button.parentElement.parentElement.querySelector('.item-children');
+            if (children) {
+                const isExpanded = children.classList.contains('expanded');
+                
+                if (isExpanded) {
+                    // Collapse
+                    children.classList.remove('expanded');
+                    children.classList.add('collapsed');
+                    button.classList.remove('expanded');
+                } else {
+                    // Expand
+                    children.classList.remove('collapsed');
+                    children.classList.add('expanded');
+                    button.classList.add('expanded');
+                }
+            }
+        }
+
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
             setCurrentDate();
