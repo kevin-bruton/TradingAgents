@@ -40,6 +40,15 @@ app_state: Dict[str, Any] = {
     "overall_progress": 0 # 0-100
 }
 
+# Define the strict sequential phase execution order
+PHASE_SEQUENCE = [
+    "data_collection_phase",
+    "research_phase",
+    "planning_phase",
+    "execution_phase",
+    "risk_analysis_phase"
+]
+
 # Mount the static directory to serve CSS, JS, etc.
 app.mount("/static", StaticFiles(directory="webapp/static"), name="static")
 
@@ -145,12 +154,16 @@ def update_execution_state(state: Dict[str, Any]):
             if report_data:
                 update_agent_status(agent_info, "completed", report_data, state)
         
+        # Mark in-progress agent(s) sequentially BEFORE recalculating phase status
+        mark_in_progress_agents(app_state["execution_tree"])
+        # Recalculate phase statuses after setting agent in-progress markers
+        recalc_phase_statuses(app_state["execution_tree"])
         # Update overall progress
         execution_tree = app_state["execution_tree"]
         total_agents = len(agent_state_mapping)
         completed_agents = count_completed_agents(execution_tree)
         app_state["overall_progress"] = min(100, int((completed_agents / max(total_agents, 1)) * 100))
-        
+
         print(f"📊 Progress updated: {app_state['overall_progress']}% ({completed_agents}/{total_agents} agents)")
 
 def initialize_complete_execution_tree():
@@ -276,8 +289,7 @@ def update_agent_status(agent_info: dict, status: str, report_data: any, full_st
             messages_node["status"] = "completed"
             messages_node["content"] = extract_agent_messages(full_state, agent_info["agent_id"])
     
-    # Update phase status if all agents in phase are completed
-    update_phase_status_if_complete(agent_info["phase"], execution_tree)
+    # Phase status recalculated globally in recalc_phase_statuses
 
 def find_agent_in_tree(agent_id: str, tree: list):
     """Find an agent node in the execution tree."""
@@ -317,17 +329,27 @@ def extract_agent_messages(state: dict, agent_id: str) -> str:
     else:
         return "💬 Agent Messages\n\nExecution completed without specific message logs"
 
-def update_phase_status_if_complete(phase_id: str, execution_tree: list):
-    """Update phase status to completed if all its agents are completed."""
-    phase_node = find_item_by_id(f"{phase_id}_phase", execution_tree)
-    if not phase_node:
-        return
-        
-    # Check if all agents in this phase are completed
-    all_completed = all(agent["status"] == "completed" for agent in phase_node["children"])
-    if all_completed and phase_node["status"] != "completed":
-        phase_node["status"] = "completed"
-        phase_node["content"] = f"✅ {phase_node['name']} - All agents completed successfully"
+def recalc_phase_statuses(execution_tree: list):
+    """Recalculate each phase's status: pending (no started), in_progress (some running/completed but not all), completed (all done), error if any child error."""
+    for phase in execution_tree:
+        if not phase.get("children"):
+            continue
+        child_statuses = [c["status"] for c in phase["children"]]
+        if any(s == "error" for s in child_statuses):
+            phase["status"] = "error"
+            phase["content"] = f"❌ {phase['name']} - Error in sub-task"
+        elif all(s == "completed" for s in child_statuses):
+            phase["status"] = "completed"
+            phase["content"] = f"✅ {phase['name']} - All agents completed successfully"
+        elif any(s in ("in_progress", "completed") for s in child_statuses):
+            # At least one started but not all done
+            if phase["status"] != "in_progress":
+                phase["status"] = "in_progress"
+                phase["content"] = f"⏳ {phase['name']} - Running..."
+        else:
+            # All pending
+            phase["status"] = "pending"
+
 
 def count_completed_agents(execution_tree: list) -> int:
     """Count the number of completed agents across all phases."""
@@ -338,6 +360,49 @@ def count_completed_agents(execution_tree: list) -> int:
                 if agent["status"] == "completed":
                     count += 1
     return count
+
+def mark_in_progress_agents(execution_tree: list):
+    """Sequentially activate only the earliest phase that still has pending agents.
+    Rules:
+      - A phase becomes active when all prior phases are completed.
+      - Only the first such phase can have an in_progress agent.
+      - Within that phase, mark exactly one first pending agent as in_progress.
+    """
+    # Build quick lookup by id
+    phase_map = {p["id"]: p for p in execution_tree}
+
+    # Determine which phase should be active
+    active_phase = None
+    for phase_id in PHASE_SEQUENCE:
+        phase = phase_map.get(phase_id)
+        if not phase:
+            continue
+        # If all previous phases completed, and this phase not fully completed, it's the active one
+        prev_completed = all(
+            (phase_map.get(prev_id) and all(c["status"] == "completed" for c in phase_map[prev_id].get("children", [])))
+            for prev_id in PHASE_SEQUENCE[:PHASE_SEQUENCE.index(phase_id)]
+        )
+        phase_done = all(c["status"] == "completed" for c in phase.get("children", []))
+        if prev_completed and not phase_done:
+            active_phase = phase
+            break
+
+    if not active_phase:
+        return
+
+    # If an agent already in progress in the active phase, leave as-is
+    if any(a["status"] == "in_progress" for a in active_phase.get("children", [])):
+        return
+
+    # Otherwise pick first pending agent
+    for agent in active_phase.get("children", []):
+        if agent["status"] == "pending":
+            agent["status"] = "in_progress"
+            agent["content"] = f"⏳ {agent['name']} - Running analysis..."
+            for child in agent.get("children", []):
+                if child["status"] == "pending":
+                    child["status"] = "in_progress"
+            break
 
 def run_trading_process(company_symbol: str, config: Dict[str, Any]):
     """Runs the TradingAgentsGraph in a separate thread."""
@@ -417,8 +482,10 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
+    from datetime import date
     template = jinja_env.get_template("index.html")
-    return template.render(app_state=app_state)
+    today_str = date.today().isoformat()
+    return template.render(app_state=app_state, default_date=today_str)
 
 @app.post("/start", response_class=HTMLResponse)
 async def start_process(
@@ -481,22 +548,6 @@ async def get_status():
         template = jinja_env.get_template("_partials/left_panel.html")
         return template.render(tree=app_state["execution_tree"], app_state=app_state)
 
-@app.get("/status-content", response_class=HTMLResponse)
-async def get_status_content():
-    with app_state_lock:
-        if not app_state["execution_tree"]:
-            return HTMLResponse(content="<p>No process running. Start a new one from the configuration.</p>")
-        
-        template = jinja_env.get_template("_partials/tree_content.html")
-        tree_content = template.render(tree=app_state["execution_tree"])
-        
-        # Add out-of-band updates for progress bar
-        progress_updates = f'''
-        <div id="overall-progress-bar" hx-swap-oob="true" style="width:{app_state["overall_progress"]}%;"></div>
-        <span id="overall-progress-text" hx-swap-oob="true">{app_state["overall_progress"]}% ({app_state["overall_status"]})</span>
-        '''
-        
-        return HTMLResponse(content=tree_content + progress_updates)
 
 @app.get("/status-updates")
 async def get_status_updates():

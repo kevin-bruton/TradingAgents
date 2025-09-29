@@ -41,7 +41,7 @@
 </h2>
 
 {% if tree %}
-    <ul class="execution-tree" id="execution-tree" hx-get="/status-content" hx-trigger="every 5s" hx-swap="innerHTML">
+    <ul class="execution-tree" id="execution-tree">
         {% for item in tree %}
             {{ render_item(item) }}
         {% endfor %}

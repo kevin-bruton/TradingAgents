@@ -34,12 +34,20 @@
                     
                     <label for="quick_think_llm">Quick Think LLM:</label>
                     <select id="quick_think_llm" name="quick_think_llm" required>
-                        <!-- Options will be populated by JavaScript -->
+                        {% if not app_state.get('config') %}
+                        <option value="x-ai/grok-4-fast:free">xAI: Grok 4 Fast (free)</option>
+                        <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek: DeepSeek V3.1 (free)</option>
+                        <option value="meta-llama/llama-4-scout:free">Meta: Llama 4 Scout</option>
+                        {% endif %}
                     </select>
                     
                     <label for="deep_think_llm">Deep Think LLM:</label>
                     <select id="deep_think_llm" name="deep_think_llm" required>
-                        <!-- Options will be populated by JavaScript -->
+                        {% if not app_state.get('config') %}
+                        <option value="qwen/qwen3-235b-a22b:free">Qwen: Qwen3 235B A22B (free)</option>
+                        <option value="openai/gpt-oss-120b:free">OpenAI: gpt-oss-120b (free)</option>
+                        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 - 685B</option>
+                        {% endif %}
                     </select>
                     
                     <label for="max_debate_rounds">Max Debate Rounds:</label>
@@ -55,7 +63,7 @@
                     <input type="number" id="cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
                     
                     <label for="analysis_date">Analysis Date:</label>
-                    <input type="date" id="analysis_date" name="analysis_date" required>
+                    <input type="date" id="analysis_date" name="analysis_date" value="{{ default_date }}" required>
                     
                     <button type="submit">Start Process</button>
                     <div id="loading" class="htmx-indicator">Starting process...</div>
@@ -178,28 +186,30 @@
 
         // Set current date as default for analysis_date
         function setCurrentDate() {
-            const today = new Date();
-            const dateString = today.toISOString().split('T')[0];
-            document.getElementById('analysis_date').value = dateString;
+            const el = document.getElementById('analysis_date');
+            if (el && !el.value) { // only set if not already provided by server
+                const today = new Date();
+                const dateString = today.toISOString().split('T')[0];
+                el.value = dateString;
+            }
         }
 
         // Toggle node functionality for collapsible tree
         function toggleNode(button) {
-            const children = button.parentElement.parentElement.querySelector('.item-children');
-            if (children) {
-                const isExpanded = children.classList.contains('expanded');
-                
-                if (isExpanded) {
-                    // Collapse
-                    children.classList.remove('expanded');
-                    children.classList.add('collapsed');
-                    button.classList.remove('expanded');
-                } else {
-                    // Expand
-                    children.classList.remove('collapsed');
-                    children.classList.add('expanded');
-                    button.classList.add('expanded');
-                }
+            const li = button.closest('li.process-item');
+            const children = li ? li.querySelector(':scope > .item-children') : null;
+            if (!children) return;
+            const isExpanded = children.classList.contains('expanded');
+            if (isExpanded) {
+                children.classList.remove('expanded');
+                children.classList.add('collapsed');
+                button.classList.remove('expanded');
+                button.setAttribute('aria-expanded', 'false');
+            } else {
+                children.classList.remove('collapsed');
+                children.classList.add('expanded');
+                button.classList.add('expanded');
+                button.setAttribute('aria-expanded', 'true');
             }
         }
 
@@ -268,14 +278,14 @@
 
         // Handle HTMX before request to save state
         document.addEventListener('htmx:beforeSwap', function(event) {
-            if (event.target.id === 'left-panel-content') {
+                if (event.target.id === 'left-panel') {
                 window.savedExpansionState = saveExpansionState();
             }
         });
 
         // Handle HTMX after settle to restore state
-        document.addEventListener('htmx:afterSettle', function(event) {
-            if (event.target.id === 'left-panel-content' && window.savedExpansionState) {
+            document.addEventListener('htmx:afterSettle', function(event) {
+                if (event.target.id === 'left-panel' && window.savedExpansionState) {
                 restoreExpansionState(window.savedExpansionState);
             }
         });
@@ -319,8 +329,11 @@
 
         // Start targeted updates when execution tree is present
         function startTargetedUpdates() {
-            if (document.querySelector('.execution-tree')) {
-                window.statusUpdateInterval = setInterval(updateStatusIndicators, 2000); // Update every 2 seconds
+            const tree = document.querySelector('.execution-tree');
+            if (!tree) return;
+            if (!window.statusUpdateInterval) {
+                console.debug('[status] starting interval');
+                window.statusUpdateInterval = setInterval(updateStatusIndicators, 2000);
             }
         }
 
@@ -343,7 +356,7 @@
 
         // Handle when new content is loaded (like when starting a process)
         document.addEventListener('htmx:afterSettle', function(event) {
-            if (event.target.id === 'left-panel-content') {
+                if (event.target.id === 'left-panel') {
                 if (window.savedExpansionState) {
                     restoreExpansionState(window.savedExpansionState);
                 }
