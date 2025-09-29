@@ -142,8 +142,8 @@ The left panel should display a hierarchical tree structure as follows:
     ├── 🛡️ Conservative Risk Analyst
     │   ├── 📄 Risk Assessment (Conservative)
     │   └── 💬 Agent Messages
-    └── ⚠️ Risk Judge
-        ├── 📄 Final Risk Decision
+    └── 🧠 Portfolio Manager (Final Decision)
+    ├── 📄 Portfolio Manager's Decision
         └── 💬 Agent Messages
 ```
 

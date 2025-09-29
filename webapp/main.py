@@ -48,7 +48,9 @@ PHASE_SEQUENCE = [
     "research_phase",
     "planning_phase",
     "execution_phase",
-    "risk_analysis_phase"
+    "risk_analysis_phase",
+    # New dedicated top-level phase for the final portfolio decision
+    "final_decision_phase"
 ]
 
 # Mount the static directory to serve CSS, JS, etc.
@@ -162,10 +164,11 @@ def update_execution_state(state: Dict[str, Any]):
                 "report_name": "Risk Assessment (Conservative)"
             },
             "Risk Judge": {
-                "phase": "risk_analysis", 
+                # Moved to its own dedicated phase for prominence
+                "phase": "final_decision", 
                 "agent_id": "risk_judge",
                 "report_key": "final_trade_decision",
-                "report_name": "Final Risk Decision"
+                "report_name": "Portfolio Manager's Decision"
             }
         }
         
@@ -240,8 +243,16 @@ def initialize_complete_execution_tree():
             "children": [
                 create_agent_node("risky_analyst", "🚨 Aggressive Risk Analyst"),
                 create_agent_node("neutral_analyst", "⚖️ Neutral Risk Analyst"),
-                create_agent_node("safe_analyst", "🛡️ Conservative Risk Analyst"),
-                create_agent_node("risk_judge", "⚠️ Risk Judge")
+                create_agent_node("safe_analyst", "🛡️ Conservative Risk Analyst")
+            ]
+        },
+        {
+            "id": "final_decision_phase",
+            "name": "🧠 Portfolio Manager's Decision",
+            "status": "pending",
+            "content": "Final portfolio / trade decision synthesized from all prior phases",
+            "children": [
+                create_agent_node("risk_judge", "🧠 Portfolio Manager")
             ]
         }
     ]
