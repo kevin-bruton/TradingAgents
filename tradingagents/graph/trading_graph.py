@@ -21,6 +21,7 @@ from tradingagents.agents.utils.agent_states import (
     RiskDebateState,
 )
 from tradingagents.dataflows.interface import set_config
+from tradingagents.dataflows.ssl_utils import setup_global_ssl_config
 
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -50,6 +51,9 @@ class TradingAgentsGraph:
 
         # Update the interface's config
         set_config(self.config)
+        
+        # Set up global SSL configuration
+        setup_global_ssl_config(self.config)
 
         # Create necessary directories
         os.makedirs(
@@ -79,15 +83,48 @@ class TradingAgentsGraph:
                         "export OPENAI_API_KEY=your_openai_key_here"
                     )
             
+            # Prepare SSL configuration for HTTP client - only if explicitly configured
+            http_client_kwargs = {}
+            cert_bundle = self.config.get("ssl_cert_bundle")
+            
+            if cert_bundle and cert_bundle.strip():
+                import httpx
+                http_client_kwargs["verify"] = cert_bundle
+            elif not self.config.get("ssl_verify", True):
+                import httpx
+                http_client_kwargs["verify"] = False
+            
+            if self.config.get("http_timeout"):
+                import httpx
+                http_client_kwargs["timeout"] = self.config["http_timeout"]
+            
+            # Add proxy configuration if specified
+            if self.config.get("http_proxy") or self.config.get("https_proxy"):
+                import httpx
+                proxies = {}
+                if self.config.get("http_proxy"):
+                    proxies["http://"] = self.config["http_proxy"]
+                if self.config.get("https_proxy"):
+                    proxies["https://"] = self.config["https_proxy"]
+                http_client_kwargs["proxies"] = proxies
+            
+            # Create HTTP client only if we have custom settings
+            http_client = None
+            if http_client_kwargs:
+                import httpx
+                http_client = httpx.Client(**http_client_kwargs)
+            
             self.deep_thinking_llm = ChatOpenAI(
                 model=self.config["deep_think_llm"], 
                 base_url=self.config["backend_url"],
-                api_key=api_key
+                api_key=api_key,
+                http_client=http_client
             )
             self.quick_thinking_llm = ChatOpenAI(
                 model=self.config["quick_think_llm"], 
                 base_url=self.config["backend_url"],
-                api_key=api_key
+                api_key=api_key,
+                http_client=http_client
             )
         elif self.config["llm_provider"].lower() == "anthropic":
             self.deep_thinking_llm = ChatAnthropic(model=self.config["deep_think_llm"], base_url=self.config["backend_url"])

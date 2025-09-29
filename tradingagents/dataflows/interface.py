@@ -4,6 +4,7 @@ from .yfin_utils import *
 from .stockstats_utils import *
 from .googlenews_utils import *
 from .finnhub_utils import get_data_in_range
+from .ssl_utils import get_ssl_config, setup_global_ssl_config
 from dateutil.relativedelta import relativedelta
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -294,7 +295,13 @@ def get_google_news(
     before = start_date - relativedelta(days=look_back_days)
     before = before.strftime("%Y-%m-%d")
 
-    news_results = getNewsData(query, before, curr_date)
+    config = get_config()
+    ssl_config = get_ssl_config(config)
+    # Only pass ssl_config if it has actual configuration
+    if ssl_config:
+        news_results = getNewsData(query, before, curr_date, ssl_config)
+    else:
+        news_results = getNewsData(query, before, curr_date)
 
     news_str = ""
 

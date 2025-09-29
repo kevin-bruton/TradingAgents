@@ -23,20 +23,36 @@ def is_rate_limited(response):
     wait=wait_exponential(multiplier=1, min=4, max=60),
     stop=stop_after_attempt(5),
 )
-def make_request(url, headers):
+def make_request(url, headers, ssl_config=None):
     """Make a request with retry logic for rate limiting"""
     # Random delay before each request to avoid detection
     time.sleep(random.uniform(2, 6))
-    response = requests.get(url, headers=headers)
+    
+    # Prepare SSL configuration - only use if explicitly configured
+    kwargs = {}
+    if ssl_config:
+        if ssl_config.get("cert_bundle"):
+            kwargs["verify"] = ssl_config["cert_bundle"]
+        elif "verify" in ssl_config:
+            kwargs["verify"] = ssl_config["verify"]
+        
+        if ssl_config.get("timeout"):
+            kwargs["timeout"] = ssl_config["timeout"]
+        
+        if ssl_config.get("proxies"):
+            kwargs["proxies"] = ssl_config["proxies"]
+    
+    response = requests.get(url, headers=headers, **kwargs)
     return response
 
 
-def getNewsData(query, start_date, end_date):
+def getNewsData(query, start_date, end_date, ssl_config=None):
     """
     Scrape Google News search results for a given query and date range.
     query: str - search query
     start_date: str - start date in the format yyyy-mm-dd or mm/dd/yyyy
     end_date: str - end date in the format yyyy-mm-dd or mm/dd/yyyy
+    ssl_config: dict - SSL configuration including cert_bundle, verify, timeout, proxies
     """
     if "-" in start_date:
         start_date = datetime.strptime(start_date, "%Y-%m-%d")
@@ -64,7 +80,7 @@ def getNewsData(query, start_date, end_date):
         )
 
         try:
-            response = make_request(url, headers)
+            response = make_request(url, headers, ssl_config)
             soup = BeautifulSoup(response.content, "html.parser")
             results_on_page = soup.select("div.SoaBEf")
 

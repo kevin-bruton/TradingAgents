@@ -26,4 +26,11 @@ DEFAULT_CONFIG = {
     "online_tools": True,
     "user_position": "none",
     "cost_per_trade": 0.0,
+    # SSL/TLS Certificate settings - only use if explicitly set
+    "ssl_cert_bundle": os.getenv("REQUESTS_CA_BUNDLE") or os.getenv("CURL_CA_BUNDLE"),
+    "ssl_verify": os.getenv("SSL_VERIFY", "true").lower() in ("true", "1", "yes"),
+    "http_timeout": int(os.getenv("HTTP_TIMEOUT")) if os.getenv("HTTP_TIMEOUT") else None,
+    # Proxy settings (if needed)
+    "http_proxy": os.getenv("HTTP_PROXY"),
+    "https_proxy": os.getenv("HTTPS_PROXY"),
 }
