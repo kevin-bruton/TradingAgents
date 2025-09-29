@@ -307,7 +307,11 @@ body {
     transform: scale(1.1);
 }
 
+/* Remove default focus highlight on mouse focus but keep accessible outline for keyboard users */
 .toggle-btn:focus {
+    outline: none;
+}
+.toggle-btn:focus-visible {
     outline: 2px solid var(--accent-color);
     outline-offset: 2px;
 }
@@ -488,5 +492,53 @@ pre.message-content {
     }
     100% {
         opacity: 1;
+    }
+}
+
+/* -------------------------------------------------- */
+/* Custom Scrollbars (Dark Theme)                    */
+/* -------------------------------------------------- */
+/* WebKit Browsers (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-left: 1px solid var(--border-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(var(--hover-color), var(--bg-primary));
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: inset 0 0 4px rgba(0,0,0,0.4);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(#3a3a3a, var(--hover-color));
+}
+
+::-webkit-scrollbar-corner {
+    background: var(--bg-secondary);
+}
+
+/* Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hover-color) var(--bg-secondary);
+}
+
+/* Make pre/code blocks and panels consistent */
+#left-panel, #right-panel, pre, .item-children, pre.message-content {
+    scrollbar-width: thin;
+    scrollbar-color: var(--hover-color) var(--bg-secondary);
+}
+
+/* Reduced motion preference: simplify visuals */
+@media (prefers-reduced-motion: reduce) {
+    ::-webkit-scrollbar-thumb {
+        box-shadow: none;
     }
 }
