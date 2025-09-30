@@ -24,31 +24,13 @@
                     <input type="text" id="company_symbol" name="company_symbol" value="AAPL" required>
                     
                     <label for="llm_provider">LLM Provider:</label>
-                    <select id="llm_provider" name="llm_provider" onchange="updateModelOptions()" required>
-                        <option value="openai">OpenAI</option>
-                        <option value="openrouter" selected>OpenRouter</option>
-                        <option value="google">Google (Gemini)</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="ollama">Ollama</option>
-                    </select>
+                    <select id="llm_provider" name="llm_provider" onchange="updateModelOptions()" required></select>
                     
                     <label for="quick_think_llm">Quick Think LLM:</label>
-                    <select id="quick_think_llm" name="quick_think_llm" required>
-                        {% if not app_state.get('config') %}
-                        <option value="x-ai/grok-4-fast:free">xAI: Grok 4 Fast (free)</option>
-                        <option value="deepseek/deepseek-chat-v3.1:free">DeepSeek: DeepSeek V3.1 (free)</option>
-                        <option value="meta-llama/llama-4-scout:free">Meta: Llama 4 Scout</option>
-                        {% endif %}
-                    </select>
+                    <select id="quick_think_llm" name="quick_think_llm" required></select>
                     
                     <label for="deep_think_llm">Deep Think LLM:</label>
-                    <select id="deep_think_llm" name="deep_think_llm" required>
-                        {% if not app_state.get('config') %}
-                        <option value="qwen/qwen3-235b-a22b:free">Qwen: Qwen3 235B A22B (free)</option>
-                        <option value="openai/gpt-oss-120b:free">OpenAI: gpt-oss-120b (free)</option>
-                        <option value="deepseek/deepseek-chat-v3-0324:free">DeepSeek V3 - 685B</option>
-                        {% endif %}
-                    </select>
+                    <select id="deep_think_llm" name="deep_think_llm" required></select>
                     
                     <label for="max_debate_rounds">Max Debate Rounds:</label>
                     <select id="max_debate_rounds" name="max_debate_rounds" required>
@@ -220,82 +202,31 @@
             if (progressBar && typeof progress === 'number') progressBar.style.width = progress + '%';
             if (progressText) progressText.textContent = progress + '% (' + status + ')';
         }
-        // Model options for each provider
-        const modelOptions = {
-            "openai": {
-                "quick": [
-                    { value: "gpt-4o-mini", text: "GPT-4o-mini - Fast and efficient for quick tasks" },
-                    { value: "gpt-4.1-nano", text: "GPT-4.1-nano - Ultra-lightweight model for basic operations" },
-                    { value: "gpt-4.1-mini", text: "GPT-4.1-mini - Compact model with good performance" },
-                    { value: "gpt-4o", text: "GPT-4o - Standard model with solid capabilities" }
-                ],
-                "deep": [
-                    { value: "gpt-4.1-nano", text: "GPT-4.1-nano - Ultra-lightweight model for basic operations" },
-                    { value: "gpt-4.1-mini", text: "GPT-4.1-mini - Compact model with good performance" },
-                    { value: "gpt-4o", text: "GPT-4o - Standard model with solid capabilities" },
-                    { value: "o4-mini", text: "o4-mini - Specialized reasoning model (compact)" },
-                    { value: "o3-mini", text: "o3-mini - Advanced reasoning model (lightweight)" },
-                    { value: "o3", text: "o3 - Full advanced reasoning model" },
-                    { value: "o1", text: "o1 - Premier reasoning and problem-solving model" }
-                ]
-            },
-            "openrouter": {
-                "quick": [
-                    { value: "x-ai/grok-4-fast:free", text: "xAI: Grok 4 Fast (free)" },
-                    { value: "deepseek/deepseek-chat-v3.1:free", text: "DeepSeek: DeepSeek V3.1 (free)" },
-                    { value: "z-ai/glm-4-32b", text: "Z.AI: GLM 4 32B" },
-                    { value: "meta-llama/llama-4-scout:free", text: "Meta: Llama 4 Scout" },
-                    { value: "meta-llama/llama-3.3-8b-instruct:free", text: "Meta: Llama 3.3 8B Instruct" },
-                    { value: "google/gemini-2.0-flash-exp:free", text: "Google: Gemini 2.0 Flash (free)" }
-                ],
-                "deep": [
-                    { value: "qwen/qwen3-235b-a22b:free", text: "Qwen: Qwen3 235B A22B (free)" },
-                    { value: "openai/gpt-oss-120b:free", text: "OpenAI: gpt-oss-120b (free)" },
-                    { value: "z-ai/glm-4-32b", text: "Z.AI: GLM 4 32B" },
-                    { value: "deepseek/deepseek-chat-v3-0324:free", text: "DeepSeek V3 - 685B-parameter model" }
-                ]
-            },
-            "google": {
-                "quick": [
-                    { value: "gemini-2.0-flash-lite", text: "Gemini 2.0 Flash-Lite - Cost efficiency and low latency" },
-                    { value: "gemini-2.0-flash", text: "Gemini 2.0 Flash - Next generation features, speed, and thinking" },
-                    { value: "gemini-2.5-flash-preview-05-20", text: "Gemini 2.5 Flash - Adaptive thinking, cost efficiency" }
-                ],
-                "deep": [
-                    { value: "gemini-2.0-flash-lite", text: "Gemini 2.0 Flash-Lite - Cost efficiency and low latency" },
-                    { value: "gemini-2.0-flash", text: "Gemini 2.0 Flash - Next generation features, speed, and thinking" },
-                    { value: "gemini-2.5-flash-preview-05-20", text: "Gemini 2.5 Flash - Adaptive thinking, cost efficiency" },
-                    { value: "gemini-2.5-pro-preview-06-05", text: "Gemini 2.5 Pro" }
-                ]
-            },
-            "anthropic": {
-                "quick": [
-                    { value: "claude-3-5-haiku-latest", text: "Claude Haiku 3.5 - Fast inference and standard capabilities" },
-                    { value: "claude-3-5-sonnet-latest", text: "Claude Sonnet 3.5 - Highly capable standard model" },
-                    { value: "claude-3-7-sonnet-latest", text: "Claude Sonnet 3.7 - Exceptional hybrid reasoning" },
-                    { value: "claude-sonnet-4-0", text: "Claude Sonnet 4 - High performance and excellent reasoning" }
-                ],
-                "deep": [
-                    { value: "claude-3-5-haiku-latest", text: "Claude Haiku 3.5 - Fast inference and standard capabilities" },
-                    { value: "claude-3-5-sonnet-latest", text: "Claude Sonnet 3.5 - Highly capable standard model" },
-                    { value: "claude-3-7-sonnet-latest", text: "Claude Sonnet 3.7 - Exceptional hybrid reasoning" },
-                    { value: "claude-sonnet-4-0", text: "Claude Sonnet 4 - High performance and excellent reasoning" },
-                    { value: "claude-opus-4-0", text: "Claude Opus 4 - Most powerful Anthropic model" }
-                ]
-            },
-            "ollama": {
-                "quick": [
-                    { value: "granite3.3:2b", text: "Granite 3.3 2B" },
-                    { value: "llama3.1", text: "llama3.1 local" },
-                    { value: "llama3.2", text: "llama3.2 local" }
-                ],
-                "deep": [
-                    { value: "granite3.3:2b", text: "Granite 3.3 2B" },
-                    { value: "llama3.1", text: "llama3.1 local" },
-                    { value: "qwen3", text: "qwen3" }
-                ]
+        // Populated dynamically from /config/providers
+        let modelOptions = {};
+        let providerDisplayNames = {};
+
+        async function fetchProviderConfig() {
+            try {
+                const resp = await fetch('/config/providers');
+                const data = await resp.json();
+                const providers = data.providers || [];
+                const providerSelect = document.getElementById('llm_provider');
+                providerSelect.innerHTML = '';
+                providers.forEach(p => {
+                    providerDisplayNames[p.key] = p.display_name || p.key;
+                    modelOptions[p.key] = p.models || {};
+                    const opt = document.createElement('option');
+                    opt.value = p.key;
+                    opt.textContent = p.display_name || p.key;
+                    if (p.key === 'openrouter') opt.selected = true; // keep previous default
+                    providerSelect.appendChild(opt);
+                });
+                updateModelOptions();
+            } catch (e) {
+                console.error('Failed to load provider configuration', e);
             }
-        };
+        }
 
         function updateModelOptions() {
             const provider = document.getElementById('llm_provider').value;
@@ -307,24 +238,22 @@
             deepSelect.innerHTML = '';
             
             // Populate quick think options
-            if (modelOptions[provider] && modelOptions[provider].quick) {
-                modelOptions[provider].quick.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.value;
-                    option.textContent = model.text;
-                    quickSelect.appendChild(option);
-                });
-            }
+            const quickList = (modelOptions[provider] && modelOptions[provider].quick) || [];
+            quickList.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m.id || m.value || m; // support both shapes
+                option.textContent = m.name || m.text || option.value;
+                quickSelect.appendChild(option);
+            });
             
             // Populate deep think options
-            if (modelOptions[provider] && modelOptions[provider].deep) {
-                modelOptions[provider].deep.forEach(model => {
-                    const option = document.createElement('option');
-                    option.value = model.value;
-                    option.textContent = model.text;
-                    deepSelect.appendChild(option);
-                });
-            }
+            const deepList = (modelOptions[provider] && modelOptions[provider].deep) || [];
+            deepList.forEach(m => {
+                const option = document.createElement('option');
+                option.value = m.id || m.value || m;
+                option.textContent = m.name || m.text || option.value;
+                deepSelect.appendChild(option);
+            });
         }
 
         function togglePositionFields() {
@@ -349,7 +278,7 @@
             }
         }
 
-        // Toggle node functionality for collapsible tree
+    // Toggle node functionality for collapsible tree
         function toggleNode(button) {
             const li = button.closest('li.process-item');
             const children = li ? li.querySelector(':scope > .item-children') : null;
@@ -366,7 +295,10 @@
                 button.classList.add('expanded');
                 button.setAttribute('aria-expanded', 'true');
             }
-        }
+    }
+
+    // Initial fetch of provider config
+    fetchProviderConfig();
 
         // Save the current expansion state of all toggleable items
         function saveExpansionState() {

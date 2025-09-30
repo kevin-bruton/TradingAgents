@@ -789,70 +789,37 @@ def _call_llm_api(prompt, config):
         except Exception as e:
             # Catch any other Gemini API errors
             error_str = str(e).lower()
+            from tradingagents.utils.error_messages import connection_failed, authentication_failed, provider_error
             if "connection" in error_str or "network" in error_str:
-                error_msg = (
-                    f"❌ Gemini API connection failed\n"
-                    f"Unable to connect to Google's Gemini API\n"
-                    f"This could be due to:\n"
-                    f"  • Network connectivity issues\n"
-                    f"  • Invalid API key\n"
-                    f"  • Firewall blocking the connection\n"
-                    f"  • Google AI service temporarily unavailable\n"
-                    f"\nAlternatives:\n"
-                    f"  • Switch to OpenAI: 'llm_provider': 'openai' in default_config.py\n"
-                    f"  • Use offline tools: 'online_tools': False in default_config.py"
-                )
-                raise ValueError(error_msg) from e
+                raise ValueError(connection_failed("Gemini", "https://generativelanguage.googleapis.com")) from e
             elif "authentication" in error_str or "api key" in error_str:
-                error_msg = (
-                    f"❌ Gemini API authentication failed\n"
-                    f"Your Google API key appears to be invalid or expired.\n"
-                    f"Please check your GOOGLE_API_KEY environment variable.\n"
-                    f"Get a valid key from: https://aistudio.google.com/app/apikey"
-                )
-                raise ValueError(error_msg) from e
+                raise ValueError(authentication_failed("Gemini")) from e
             else:
-                # Re-raise other unexpected errors with provider context
-                error_msg = (
-                    f"❌ Gemini API error with model '{model}'\n"
-                    f"Error: {str(e)}\n"
-                    f"Valid models: {', '.join(valid_models[:5])}...\n"
-                    f"\nAlternatives:\n"
-                    f"  • Switch to OpenAI: 'llm_provider': 'openai' in default_config.py\n"
-                    f"  • Use offline tools: 'online_tools': False in default_config.py"
-                )
-                raise ValueError(error_msg) from e
+                raise ValueError(provider_error("Gemini", model, str(e), valid_models[:5])) from e
             
     else:
         # Use OpenAI-compatible providers (OpenAI, OpenRouter, Ollama)
         import os
-        from openai import OpenAI, AuthenticationError, RateLimitError, NotFoundError
+        from openai import AuthenticationError, RateLimitError, NotFoundError
+        from tradingagents.utils.llm_client import build_openai_compatible_client
         
         # Check if API key is available based on provider
+        from tradingagents.utils.error_messages import missing_api_key, invalid_model, quota_exceeded, authentication_failed, connection_failed, provider_error
         if provider.lower() == "openrouter":
             api_key = os.getenv("OPENROUTER_API_KEY")
             if not api_key:
-                raise ValueError(
-                    "❌ OPENROUTER_API_KEY environment variable is not set.\n"
-                    "Please set your OpenRouter API key:\n"
-                    "export OPENROUTER_API_KEY=your_openrouter_key_here\n"
-                    "Get your key from: https://openrouter.ai/keys"
-                )
+                raise ValueError(missing_api_key("OpenRouter", "OPENROUTER_API_KEY", "Get your key from: https://openrouter.ai/keys"))
         else:
-            # Default to OpenAI
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError(
-                    "❌ OPENAI_API_KEY environment variable is not set.\n"
-                    "Please set your OpenAI API key:\n"
-                    "export OPENAI_API_KEY=your_key_here"
-                )
+                raise ValueError(missing_api_key("OpenAI", "OPENAI_API_KEY"))
         
         model = config["quick_think_llm"]
         valid_models = _get_valid_models("openai")
         
         try:
-            client = OpenAI(base_url=config["backend_url"], api_key=api_key)
+            # Centralized client creation (ensures base_url + correct key usage)
+            client, _embedding_hint = build_openai_compatible_client(config, purpose="chat")
             response = client.chat.completions.create(
                 model=model,
                 messages=[
@@ -868,35 +835,13 @@ def _call_llm_api(prompt, config):
             return response.choices[0].message.content
             
         except NotFoundError as e:
-            error_msg = (
-                f"❌ Invalid OpenAI model: '{model}'\n"
-                f"Valid OpenAI models are:\n"
-                + "\n".join(f"  • {m}" for m in valid_models) +
-                f"\n\nPlease update your configuration in default_config.py:\n"
-                f"  'quick_think_llm': 'gpt-4o-mini'  # or another valid model"
-            )
-            raise ValueError(error_msg) from e
+            raise ValueError(invalid_model("OpenAI", model, valid_models)) from e
             
         except RateLimitError as e:
-            error_msg = (
-                f"❌ OpenAI API quota exceeded for model '{model}'\n"
-                f"You have hit your usage limits for the OpenAI API.\n"
-                f"Options:\n"
-                f"  • Check your billing and add credits: https://platform.openai.com/account/billing\n"
-                f"  • Wait for quota to reset\n"
-                f"  • Switch to Gemini by setting: 'llm_provider': 'gemini' in default_config.py\n"
-                f"  • Use offline tools by setting: 'online_tools': False in default_config.py"
-            )
-            raise ValueError(error_msg) from e
+            raise ValueError(quota_exceeded("OpenAI", model)) from e
             
         except AuthenticationError as e:
-            error_msg = (
-                f"❌ OpenAI API authentication failed\n"
-                f"Your API key appears to be invalid or expired.\n"
-                f"Please check your OPENAI_API_KEY environment variable.\n"
-                f"Get a valid key from: https://platform.openai.com/api-keys"
-            )
-            raise ValueError(error_msg) from e
+            raise ValueError(authentication_failed("OpenAI")) from e
             
         except Exception as e:
             # Catch any other OpenAI API errors (connection, etc.)

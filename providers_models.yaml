@@ -1,0 +1,122 @@
+# Central configuration for LLM providers and models
+# Each provider has a display name, base_url (may contain environment templates),
+# and categorized model lists. Categories (quick, deep) correspond to UI/CLI selections.
+# Additional categories can be added as needed.
+
+providers:
+  openai:
+    display_name: OpenAI
+    base_url: https://api.openai.com/v1
+    models:
+      quick:
+        - id: gpt-4o-mini
+          name: GPT-4o-mini - Fast and efficient for quick tasks
+        - id: gpt-4.1-nano
+          name: GPT-4.1-nano - Ultra-lightweight model for basic operations
+        - id: gpt-4.1-mini
+          name: GPT-4.1-mini - Compact model with good performance
+        - id: gpt-4o
+          name: GPT-4o - Standard model with solid capabilities
+      deep:
+        - id: gpt-4.1-nano
+          name: GPT-4.1-nano - Ultra-lightweight model for basic operations
+        - id: gpt-4.1-mini
+          name: GPT-4.1-mini - Compact model with good performance
+        - id: gpt-4o
+          name: GPT-4o - Standard model with solid capabilities
+        - id: o4-mini
+          name: o4-mini - Specialized reasoning model (compact)
+        - id: o3-mini
+          name: o3-mini - Advanced reasoning model (lightweight)
+        - id: o3
+          name: o3 - Full advanced reasoning model
+        - id: o1
+          name: o1 - Premier reasoning and problem-solving model
+  anthropic:
+    display_name: Anthropic
+    base_url: https://api.anthropic.com/
+    models:
+      quick:
+        - id: claude-3-5-haiku-latest
+          name: Claude Haiku 3.5 - Fast inference and standard capabilities
+        - id: claude-3-5-sonnet-latest
+          name: Claude Sonnet 3.5 - Highly capable standard model
+        - id: claude-3-7-sonnet-latest
+          name: Claude Sonnet 3.7 - Exceptional hybrid reasoning
+        - id: claude-sonnet-4-0
+          name: Claude Sonnet 4 - High performance and excellent reasoning
+      deep:
+        - id: claude-3-5-haiku-latest
+          name: Claude Haiku 3.5 - Fast inference and standard capabilities
+        - id: claude-3-5-sonnet-latest
+          name: Claude Sonnet 3.5 - Highly capable standard model
+        - id: claude-3-7-sonnet-latest
+          name: Claude Sonnet 3.7 - Exceptional hybrid reasoning
+        - id: claude-sonnet-4-0
+          name: Claude Sonnet 4 - High performance and excellent reasoning
+        - id: claude-opus-4-0
+          name: Claude Opus 4 - Most powerful Anthropic model
+  google:
+    display_name: Google (Gemini)
+    base_url: https://generativelanguage.googleapis.com/v1
+    models:
+      quick:
+        - id: gemini-2.0-flash-lite
+          name: Gemini 2.0 Flash-Lite - Cost efficiency and low latency
+        - id: gemini-2.0-flash
+          name: Gemini 2.0 Flash - Next generation features, speed, and thinking
+        - id: gemini-2.5-flash-preview-05-20
+          name: Gemini 2.5 Flash - Adaptive thinking, cost efficiency
+      deep:
+        - id: gemini-2.0-flash-lite
+          name: Gemini 2.0 Flash-Lite - Cost efficiency and low latency
+        - id: gemini-2.0-flash
+          name: Gemini 2.0 Flash - Next generation features, speed, and thinking
+        - id: gemini-2.5-flash-preview-05-20
+          name: Gemini 2.5 Flash - Adaptive thinking, cost efficiency
+        - id: gemini-2.5-pro-preview-06-05
+          name: Gemini 2.5 Pro
+  openrouter:
+    display_name: OpenRouter
+    base_url: https://openrouter.ai/api/v1
+    models:
+      quick:
+        - id: x-ai/grok-4-fast:free
+          name: "xAI: Grok 4 Fast (free)"
+        - id: deepseek/deepseek-chat-v3.1:free
+          name: "DeepSeek: DeepSeek V3.1 (free)"
+        - id: z-ai/glm-4-32b
+          name: "Z.AI: GLM 4 32B"
+        - id: meta-llama/llama-4-scout:free
+          name: "Meta: Llama 4 Scout"
+        - id: meta-llama/llama-3.3-8b-instruct:free
+          name: "Meta: Llama 3.3 8B Instruct - lightweight and ultra-fast"
+        - id: google/gemini-2.0-flash-exp:free
+          name: "Google: Gemini 2.0 Flash (free)"
+      deep:
+        - id: qwen/qwen3-235b-a22b:free
+          name: "Qwen: Qwen3 235B A22B (free)"
+        - id: openai/gpt-oss-120b:free
+          name: "OpenAI: gpt-oss-120b (free)"
+        - id: z-ai/glm-4-32b
+          name: "Z.AI: GLM 4 32B"
+        - id: deepseek/deepseek-chat-v3-0324:free
+          name: "DeepSeek V3 - 685B-parameter model"
+  ollama:
+    display_name: Ollama
+    base_url: http://{{ OLLAMA_HOST | default('localhost') }}:11434/v1
+    models:
+      quick:
+        - id: granite3.3:2b
+          name: Granite 3.3 2B
+        - id: llama3.1
+          name: llama3.1 local
+        - id: llama3.2
+          name: llama3.2 local
+      deep:
+        - id: granite3.3:2b
+          name: Granite 3.3 2B
+        - id: llama3.1
+          name: llama3.1 local
+        - id: qwen3
+          name: qwen3

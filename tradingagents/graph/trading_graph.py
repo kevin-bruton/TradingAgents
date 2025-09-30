@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import json
+import httpx
 from datetime import date
 from typing import Dict, Any, Tuple, List, Optional
 
@@ -65,42 +66,30 @@ class TradingAgentsGraph:
         if self.config["llm_provider"].lower() == "openai" or self.config["llm_provider"] == "ollama" or self.config["llm_provider"] == "openrouter":
             # Handle API key based on provider
             api_key = None
+            from tradingagents.utils.error_messages import missing_api_key
             if self.config["llm_provider"].lower() == "openrouter":
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if not api_key:
-                    raise ValueError(
-                        "❌ OPENROUTER_API_KEY environment variable is not set.\n"
-                        "Please set your OpenRouter API key:\n"
-                        "export OPENROUTER_API_KEY=your_openrouter_key_here\n"
-                        "Get your key from: https://openrouter.ai/keys"
-                    )
+                    raise ValueError(missing_api_key("OpenRouter", "OPENROUTER_API_KEY", "Get your key from: https://openrouter.ai/keys"))
             elif self.config["llm_provider"].lower() == "openai":
                 api_key = os.getenv("OPENAI_API_KEY")
                 if not api_key:
-                    raise ValueError(
-                        "❌ OPENAI_API_KEY environment variable is not set.\n"
-                        "Please set your OpenAI API key:\n"
-                        "export OPENAI_API_KEY=your_openai_key_here"
-                    )
+                    raise ValueError(missing_api_key("OpenAI", "OPENAI_API_KEY"))
             
             # Prepare SSL configuration for HTTP client - only if explicitly configured
             http_client_kwargs = {}
             cert_bundle = self.config.get("ssl_cert_bundle")
             
             if cert_bundle and cert_bundle.strip():
-                import httpx
                 http_client_kwargs["verify"] = cert_bundle
             elif not self.config.get("ssl_verify", True):
-                import httpx
                 http_client_kwargs["verify"] = False
             
             if self.config.get("http_timeout"):
-                import httpx
                 http_client_kwargs["timeout"] = self.config["http_timeout"]
             
             # Add proxy configuration if specified
             if self.config.get("http_proxy") or self.config.get("https_proxy"):
-                import httpx
                 proxies = {}
                 if self.config.get("http_proxy"):
                     proxies["http://"] = self.config["http_proxy"]
@@ -111,7 +100,6 @@ class TradingAgentsGraph:
             # Create HTTP client only if we have custom settings
             http_client = None
             if http_client_kwargs:
-                import httpx
                 http_client = httpx.Client(**http_client_kwargs)
             
             self.deep_thinking_llm = ChatOpenAI(
@@ -229,7 +217,7 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0, on_step_callback=None, initial_stop_loss=None, initial_take_profit=None):
+    def propagate(self, company_name, trade_date, user_position="none", cost_per_trade=0.0, on_step_callback=None, initial_stop_loss=None, initial_take_profit=None, on_stream_event=None):
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
@@ -245,13 +233,21 @@ class TradingAgentsGraph:
         )
         args = self.propagator.get_graph_args()
 
-        if on_step_callback or self.debug:
+        if on_step_callback or on_stream_event or self.debug:
             # Stream mode for callbacks or debug mode
             trace = []
             for s in self.graph.stream(init_agent_state, **args):
                 trace.append(s)
+                if on_stream_event:
+                    try:
+                        on_stream_event(s)
+                    except Exception:
+                        pass
                 if on_step_callback:
-                    on_step_callback(s)
+                    try:
+                        on_step_callback(s)
+                    except Exception:
+                        pass
             final_state = trace[-1] if trace else {}
         else:
             # Standard mode without tracing

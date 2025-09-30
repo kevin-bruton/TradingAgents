@@ -19,23 +19,15 @@ class FinancialSituationMemory:
                 self.embedding_model = None
                 self.embedding_type = "chromadb_default"
         else:
-            # Legacy API-based embeddings (kept for backward compatibility)
-            from openai import OpenAI
-            if config["backend_url"] == "http://localhost:11434/v1":
+            # Centralized API-based client creation
+            from tradingagents.utils.llm_client import build_openai_compatible_client
+            self.client, embedding_model_hint = build_openai_compatible_client(config, purpose="embeddings")
+            # If local Ollama, override embedding model name accordingly
+            if config.get("backend_url") == "http://localhost:11434/v1":
                 self.embedding = "nomic-embed-text"
-                self.client = OpenAI(base_url=config["backend_url"])
             else:
-                self.embedding = "text-embedding-3-small"
-                if "openrouter.ai" in config["backend_url"]:
-                    openai_api_key = os.getenv("OPENAI_API_KEY")
-                    if not openai_api_key:
-                        raise ValueError("❌ OPENAI_API_KEY required for API-based embeddings with OpenRouter")
-                    self.client = OpenAI(api_key=openai_api_key)
-                else:
-                    api_key = None
-                    if config.get("llm_provider") == "openai":
-                        api_key = os.getenv("OPENAI_API_KEY")
-                    self.client = OpenAI(base_url=config["backend_url"], api_key=api_key)
+                # Use hint if provided, fallback to previous default
+                self.embedding = embedding_model_hint or "text-embedding-3-small"
             self.embedding_type = "api"
         
         self.chroma_client = chromadb.PersistentClient(path=persist_directory)

@@ -198,6 +198,48 @@ Client behavior:
 
 If you need to disable WebSockets (e.g., for debugging a proxy), you can block the `/ws` path and the client will automatically revert to polling.
 
+### Centralized LLM Provider & Model Configuration
+
+All available LLM providers, their base URLs and the selectable "quick" / "deep" model tiers are now defined in a single YAML file at the project root: `providers_models.yaml`.
+
+Why this matters:
+- Single source of truth for both the CLI and Web UI (no more duplicate hard‑coded lists)
+- Easy to add / remove providers or models without changing Python or HTML templates
+- Environment variable interpolation supported for dynamic hosts (e.g. Ollama)
+
+YAML structure (excerpt):
+```yaml
+providers:
+  openai:
+    display_name: OpenAI
+    base_url: https://api.openai.com/v1
+    models:
+      quick:
+        - id: gpt-4o-mini
+          name: GPT-4o-mini - Fast and efficient for quick tasks
+      deep:
+        - id: o1
+          name: o1 - Premier reasoning and problem-solving model
+  ollama:
+    display_name: Ollama
+    base_url: http://{{ OLLAMA_HOST | default('localhost') }}:11434/v1
+    models:
+      quick:
+        - id: llama3.1
+          name: llama3.1 local
+```
+
+Updating models:
+1. Edit `providers_models.yaml` and save.
+2. The web app will pick up changes on next page load (and auto‑reload if server restarts).
+3. The CLI will reflect changes the next time you run `python -m cli.main`.
+
+Validation:
+- Backend rejects model selections not present in the YAML for the chosen provider.
+- Tests in `test_config_loader.py` ensure the loader works.
+
+If you introduce a new provider make sure to include at least one `quick` and/or `deep` tier entry so the UI has something to display.
+
 ### Rendered Reports (Markdown Support)
 
 Agent-generated reports (analysis summaries, debate histories, plans, and risk assessments) are produced in Markdown. The web frontend now renders these Markdown documents as styled HTML instead of showing raw markup. This includes support for:
@@ -207,6 +249,48 @@ Agent-generated reports (analysis summaries, debate histories, plans, and risk a
 - Fenced code blocks and inline code
 
 Security: Markdown is sanitized server‑side using `bleach` to strip unsafe tags/attributes while preserving semantic structure. If you need to extend allowed tags (e.g., to permit additional formatting), modify `ALLOWED_TAGS` / `ALLOWED_ATTRIBUTES` in `webapp/main.py`.
+
+### Persistent Run Artifacts (Results Directory)
+
+Each execution (CLI or Web) now creates a timestamped results folder to retain logs and generated Markdown reports for later review.
+
+Structure:
+
+```
+results/
+  AAPL/
+    2025-09-30_14.07/           # YYYY-MM-DD_HH.MM (minute precision)
+      message_tool.log          # Streamed reasoning + tool call summaries
+      reports/
+        market_report.md
+        sentiment_report.md
+        news_report.md
+        fundamentals_report.md
+        investment_plan.md
+        trader_investment_plan.md
+        final_trade_decision.md
+```
+
+Behavior:
+* Folder names use minutes precision. Multiple runs started within the same minute append a numerical suffix (`_1`, `_2`, ...).
+* The CLI wraps internal message buffer methods to append every message, tool call, and report section update to disk in real time.
+* The Web App uses a lightweight callback wrapper to persist evolving report sections and state snapshots during propagation.
+* Safe to delete old run folders manually; no state is cached between runs.
+
+Configuration:
+* Base path is controlled by `TRADINGAGENTS_RESULTS_DIR` (default: `./results`). See `tradingagents/default_config.py`.
+* To disable persistence temporarily, you can set the environment variable and point it to a throwaway path or adjust the code where `create_run_results_dirs` is invoked.
+
+Utility:
+* The creation logic resides in `tradingagents/utils/results.py` (`create_run_results_dirs`). It ensures uniqueness and prepares the `reports/` subdirectory and `message_tool.log` atomically.
+* Common LLM and embedding error messages (API key missing, connection failures, quota, invalid model) are now centralized in `tradingagents/utils/error_messages.py` so the same formatted strings appear both in exceptions and in `message_tool.log`. If you need to adjust wording or add a new provider, update that single module.
+
+Future enhancements (ideas):
+* Optional compression (`.tar.gz`) after run completion.
+* Retention policy (e.g., keep last N runs per ticker).
+* JSON index file summarizing run metadata (models used, decision, risk metrics).
+
+Let us know if you want any of these added.
 
 ### LLM Invocation Reliability (Automatic Retry Layer)
 
