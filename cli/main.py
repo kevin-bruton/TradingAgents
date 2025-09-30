@@ -774,6 +774,9 @@ def extract_content_string(content):
     else:
         return str(content)
 
+from tradingagents.utils.results import create_run_results_dirs
+
+
 def run_analysis():
     # First get all user selections
     selections = get_user_selections()
@@ -799,13 +802,14 @@ def run_analysis():
         [analyst.value for analyst in selections["analysts"]], config=config, debug=True
     )
 
-    # Create result directory
-    results_dir = Path(config["results_dir"]) / selections["ticker"] / selections["analysis_date"]
-    results_dir.mkdir(parents=True, exist_ok=True)
-    report_dir = results_dir / "reports"
-    report_dir.mkdir(parents=True, exist_ok=True)
-    log_file = results_dir / "message_tool.log"
-    log_file.touch(exist_ok=True)
+    # Create timestamped result directory
+    results_dir, report_dir, log_file = create_run_results_dirs(
+        config["results_dir"], selections["ticker"], selections["analysis_date"]
+    )
+    message_buffer.add_message(
+        "System",
+        f"Results directory initialized at {results_dir}"
+    )
 
     def save_message_decorator(obj, func_name):
         func = getattr(obj, func_name)
@@ -813,9 +817,10 @@ def run_analysis():
         def wrapper(*args, **kwargs):
             func(*args, **kwargs)
             timestamp, message_type, content = obj.messages[-1]
-            content = content.replace("\n", " ")  # Replace newlines with spaces
+            # Preserve newlines; add delimiter line for readability
             with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"{timestamp} [{message_type}] {content}\n")
+                f.write(f"{timestamp} [{message_type}]\n")
+                f.write(content.rstrip() + "\n---\n")
         return wrapper
     
     def save_tool_call_decorator(obj, func_name):
@@ -826,7 +831,7 @@ def run_analysis():
             timestamp, tool_name, args = obj.tool_calls[-1]
             args_str = ", ".join(f"{k}={v}" for k, v in args.items())
             with open(log_file, "a", encoding="utf-8") as f:
-                f.write(f"{timestamp} [Tool Call] {tool_name}({args_str})\n")
+                f.write(f"{timestamp} [TOOL_CALL] {tool_name}({args_str})\n")
         return wrapper
 
     def save_report_section_decorator(obj, func_name):
@@ -905,6 +910,48 @@ def run_analysis():
                 else:
                     content = str(last_message)
                     msg_type = "System"
+
+                # Agent attribution (prefer explicit name, fallback to role)
+                agent_name = None
+                for attr in ("name", "role", "sender", "author"):
+                    if hasattr(last_message, attr):
+                        val = getattr(last_message, attr)
+                        if isinstance(val, str) and val:
+                            agent_name = val
+                            break
+                # Heuristic fallback attribution based on chunk keys if no intrinsic name
+                if not agent_name:
+                    if chunk.get("market_report"):
+                        agent_name = "Market Analyst"
+                    elif chunk.get("sentiment_report"):
+                        agent_name = "Social Analyst"
+                    elif chunk.get("news_report"):
+                        agent_name = "News Analyst"
+                    elif chunk.get("fundamentals_report"):
+                        agent_name = "Fundamentals Analyst"
+                    elif chunk.get("investment_debate_state"):
+                        # Decide bull/bear vs research manager by presence of history vs judge decision growth
+                        inv_state = chunk.get("investment_debate_state", {}) or {}
+                        # Prefer current_response origin if possible
+                        if inv_state.get("current_response", "").lower().startswith("bull"):
+                            agent_name = "Bull Researcher"
+                        elif inv_state.get("current_response", "").lower().startswith("bear"):
+                            agent_name = "Bear Researcher"
+                        elif inv_state.get("judge_decision"):
+                            agent_name = "Research Manager"
+                    elif chunk.get("risk_debate_state"):
+                        risk_state = chunk.get("risk_debate_state", {}) or {}
+                        # Very simple heuristic: look at last added history keyword
+                        if risk_state.get("current_response", "").lower().startswith("risky"):
+                            agent_name = "Risky Analyst"
+                        elif risk_state.get("current_response", "").lower().startswith("safe"):
+                            agent_name = "Safe Analyst"
+                        elif risk_state.get("current_response", "").lower().startswith("neutral"):
+                            agent_name = "Neutral Analyst"
+                        elif risk_state.get("judge_decision"):
+                            agent_name = "Risk Judge"
+                if agent_name and not content.startswith(f"[{agent_name}]"):
+                    content = f"[{agent_name}] {content}"
 
                 # Add message to buffer
                 message_buffer.add_message(msg_type, content)                

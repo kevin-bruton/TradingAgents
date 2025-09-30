@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 import json
-from tradingagents.agents.utils.llm_resilience import invoke_with_retries
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm, LLMRetryConfig
 
 
 def create_social_media_analyst(llm, toolkit):
@@ -46,7 +46,11 @@ def create_social_media_analyst(llm, toolkit):
 
         chain = prompt | llm.bind_tools(tools)
         try:
-            result = invoke_with_retries(chain, state["messages"], toolkit.config)
+            retry_cfg = LLMRetryConfig(
+                max_attempts=toolkit.config.get("llm_max_retries", 4),
+                base_delay=toolkit.config.get("llm_retry_backoff", 0.75),
+            )
+            result = safe_invoke_llm(chain, state["messages"], retry_cfg)
         except Exception as e:  # noqa: BLE001
             class DummyResult:
                 def __init__(self, content):

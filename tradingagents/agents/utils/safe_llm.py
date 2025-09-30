@@ -3,6 +3,10 @@ import random
 from typing import Any, Callable, Sequence, Union
 import json
 
+# NOTE: The previous helper invoke_with_retries (llm_resilience.py) has been removed.
+# All code should now use safe_invoke_llm + LLMRetryConfig for a single, consistent
+# retry implementation (network/json transient errors with jittered exponential backoff).
+
 # Define which exceptions to treat as transient
 try:
     import httpx  # type: ignore
@@ -14,7 +18,9 @@ if httpx:
     TRANSIENT_EXCEPTION_TYPES.extend([
         httpx.TimeoutException,
         httpx.ConnectError,
-        httpx.NetworkError if hasattr(httpx, 'NetworkError') else Exception,  # broad fallback
+        # Use NetworkError when available (httpx >= specific versions). Otherwise fall back to
+        # RequestError rather than Exception to avoid masking programmer bugs (e.g. AttributeError, KeyError).
+        httpx.NetworkError if hasattr(httpx, 'NetworkError') else httpx.RequestError,
     ])
 
 # Always include JSON decode errors

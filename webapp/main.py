@@ -29,6 +29,11 @@ if missing_vars:
     print("Please create a .env file with these variables or set them in your environment.")
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.config_loader import (
+    get_provider_base_url,
+    validate_model,
+    get_providers,
+)
 
 app = FastAPI()
 
@@ -545,39 +550,41 @@ def count_completed_agents(execution_tree: list) -> int:
     return count
 
 def mark_in_progress_agents(execution_tree: list):
-    """Sequentially activate only the earliest phase that still has pending agents.
-    Rules:
-      - A phase becomes active when all prior phases are completed.
-      - Only the first such phase can have an in_progress agent.
-      - Within that phase, mark exactly one first pending agent as in_progress.
+    """Activate all pending agents in the earliest not-yet-complete phase.
+    Updated logic for parallel execution within a phase:
+      - Identify the first phase (by PHASE_SEQUENCE) whose predecessors are fully completed and which itself isn't complete.
+      - For that phase, mark every agent still in 'pending' as 'in_progress'.
+      - Do NOT overwrite agents already marked 'in_progress' or 'completed'.
+      - Also mark their immediate child nodes (messages/report) from pending -> in_progress so UI shows activity.
     """
-    # Build quick lookup by id
+    if not execution_tree:
+        return
+
     phase_map = {p["id"]: p for p in execution_tree}
 
-    # Determine which phase should be active
     active_phase = None
     for phase_id in PHASE_SEQUENCE:
         phase = phase_map.get(phase_id)
         if not phase:
             continue
-        # If all previous phases completed, and this phase not fully completed, it's the active one
         prev_completed = all(
             (phase_map.get(prev_id) and all(c["status"] == "completed" for c in phase_map[prev_id].get("children", [])))
             for prev_id in PHASE_SEQUENCE[:PHASE_SEQUENCE.index(phase_id)]
         )
-        phase_done = all(c["status"] == "completed" for c in phase.get("children", []))
-        if prev_completed and not phase_done:
+        if not prev_completed:
+            continue
+        children = phase.get("children", [])
+        if not children:
+            continue
+        phase_done = all(c["status"] == "completed" for c in children)
+        if not phase_done:
             active_phase = phase
             break
 
     if not active_phase:
         return
 
-    # If an agent already in progress in the active phase, leave as-is
-    if any(a["status"] == "in_progress" for a in active_phase.get("children", [])):
-        return
-
-    # Otherwise pick first pending agent
+    # Mark all pending agents in this phase as in_progress (parallel start)
     for agent in active_phase.get("children", []):
         if agent["status"] == "pending":
             agent["status"] = "in_progress"
@@ -585,7 +592,6 @@ def mark_in_progress_agents(execution_tree: list):
             for child in agent.get("children", []):
                 if child["status"] == "pending":
                     child["status"] = "in_progress"
-            break
 
 def run_trading_process(company_symbol: str, config: Dict[str, Any]):
     """Runs the TradingAgentsGraph in a separate thread."""
@@ -603,28 +609,39 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
         custom_config["max_debate_rounds"] = config["max_debate_rounds"]
         custom_config["cost_per_trade"] = config["cost_per_trade"]
         
-        # Set the appropriate LLM models based on provider
-        if config["llm_provider"] == "google":
+        # Validate selected models against central config
+        provider_key = config["llm_provider"]
+        for model_field in ("quick_think_llm", "deep_think_llm"):
+            mval = config.get(model_field)
+            if mval and not validate_model(provider_key, mval):
+                raise ValueError(f"Model '{mval}' not valid for provider '{provider_key}'")
+
+        # Set the appropriate LLM models based on provider (Gemini special naming retained)
+        if provider_key == "google":
             custom_config["gemini_quick_think_llm"] = config["quick_think_llm"]
             custom_config["gemini_deep_think_llm"] = config["deep_think_llm"]
         else:
             custom_config["quick_think_llm"] = config["quick_think_llm"]
             custom_config["deep_think_llm"] = config["deep_think_llm"]
-        
-        # Set backend URL based on provider
-        if config["llm_provider"] == "openrouter":
-            custom_config["backend_url"] = "https://openrouter.ai/api/v1"
-        elif config["llm_provider"] == "google":
-            custom_config["backend_url"] = "https://generativelanguage.googleapis.com/v1"
-        elif config["llm_provider"] == "anthropic":
-            custom_config["backend_url"] = "https://api.anthropic.com/"
-        elif config["llm_provider"] == "ollama":
-            custom_config["backend_url"] = f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/v1"
-        else:  # openai
-            custom_config["backend_url"] = "https://api.openai.com/v1"
+
+        # Central provider base_url
+        try:
+            custom_config["backend_url"] = get_provider_base_url(provider_key)
+        except Exception:
+            # Fallback to environment-specific logic (should not happen if YAML maintained)
+            if provider_key == "ollama":
+                custom_config["backend_url"] = f"http://{os.getenv('OLLAMA_HOST', 'localhost')}:11434/v1"
+            else:
+                custom_config["backend_url"] = "https://api.openai.com/v1"
         
         print(f"🚀 Initializing TradingAgentsGraph for {company_symbol}")
         graph = TradingAgentsGraph(config=custom_config)
+        # Create timestamped results directory for this run
+        from tradingagents.utils.results import create_run_results_dirs
+        results_dir, reports_dir, log_file = create_run_results_dirs(
+            custom_config.get("results_dir", "./results"), company_symbol, config["analysis_date"]
+        )
+        print(f"📁 Results directory: {results_dir}")
         analysis_date = config["analysis_date"]  # Use user-selected date
         print(f"🔄 Starting propagation for {company_symbol} on {analysis_date}")
         
@@ -634,12 +651,112 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
         init_tp = config.get("initial_take_profit")
 
         # The propagate method now accepts the callback and trade_date and we will inject user position.
+        # Wrap callback to also persist logs and report sections
+        def logging_callback(state: Dict[str, Any]):
+            # Persist selected evolving report sections (no verbose state key logging)
+            try:
+                report_keys = [
+                    "market_report", "sentiment_report", "news_report", "fundamentals_report",
+                    "investment_plan", "trader_investment_plan", "final_trade_decision"
+                ]
+                for rk in report_keys:
+                    content = state.get(rk)
+                    if content:
+                        out_path = reports_dir / f"{rk}.md"
+                        with open(out_path, "w", encoding="utf-8") as rf:
+                            rf.write(str(content))
+            except Exception:
+                pass
+            update_execution_state(state)
+
+        # stream event logger to capture raw message content
+        def stream_logger(event_state: Dict[str, Any]):
+            messages = event_state.get("messages", [])
+            if messages:
+                last_msg = messages[-1]
+                # Try to extract textual content similar to CLI logic
+                text = None
+                if hasattr(last_msg, "content"):
+                    lc = last_msg.content
+                    if isinstance(lc, str):
+                        text = lc
+                    elif isinstance(lc, list):
+                        # Join textual segments
+                        segs = []
+                        for seg in lc:
+                            if isinstance(seg, dict) and seg.get("type") == "text":
+                                segs.append(seg.get("text", ""))
+                            else:
+                                segs.append(str(seg))
+                        text = " ".join(segs)
+                # Agent attribution
+                agent_name = None
+                for attr in ("name", "role", "sender", "author"):
+                    if hasattr(last_msg, attr):
+                        val = getattr(last_msg, attr)
+                        if isinstance(val, str) and val:
+                            agent_name = val
+                            break
+                if not agent_name and text:
+                    # Heuristic attribution based on state keys
+                    if event_state.get("market_report"):
+                        agent_name = "Market Analyst"
+                    elif event_state.get("sentiment_report"):
+                        agent_name = "Social Analyst"
+                    elif event_state.get("news_report"):
+                        agent_name = "News Analyst"
+                    elif event_state.get("fundamentals_report"):
+                        agent_name = "Fundamentals Analyst"
+                    elif event_state.get("investment_debate_state"):
+                        inv_state = event_state.get("investment_debate_state", {}) or {}
+                        cr = inv_state.get("current_response", "").lower()
+                        if cr.startswith("bull"):
+                            agent_name = "Bull Researcher"
+                        elif cr.startswith("bear"):
+                            agent_name = "Bear Researcher"
+                        elif inv_state.get("judge_decision"):
+                            agent_name = "Research Manager"
+                    elif event_state.get("risk_debate_state"):
+                        risk_state = event_state.get("risk_debate_state", {}) or {}
+                        cr = risk_state.get("current_response", "").lower()
+                        if cr.startswith("risky"):
+                            agent_name = "Risky Analyst"
+                        elif cr.startswith("safe"):
+                            agent_name = "Safe Analyst"
+                        elif cr.startswith("neutral"):
+                            agent_name = "Neutral Analyst"
+                        elif risk_state.get("judge_decision"):
+                            agent_name = "Risk Judge"
+                if agent_name and text and not text.startswith(f"[{agent_name}]"):
+                    text = f"[{agent_name}] {text}"
+                if text:
+                    try:
+                        with open(log_file, "a", encoding="utf-8") as lf:
+                            lf.write(f"MESSAGE: {text.replace('\n',' ')}\n")
+                    except Exception:
+                        pass
+                # Tool calls if present
+                if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                    for tc in last_msg.tool_calls:
+                        try:
+                            if isinstance(tc, dict):
+                                name = tc.get("name", "unknown")
+                                args = tc.get("args", {})
+                            else:
+                                name = getattr(tc, "name", "unknown")
+                                args = getattr(tc, "args", {})
+                            with open(log_file, "a", encoding="utf-8") as lf:
+                                lf.write(f"TOOL_CALL: {name} args={args}\n")
+                        except Exception:
+                            pass
+
         final_state, processed_signal = graph.propagate(
             company_symbol,
             trade_date=analysis_date,
             user_position=user_position,
             cost_per_trade=config.get("cost_per_trade", 0.0),
-            on_step_callback=update_execution_state,
+            on_step_callback=logging_callback,
+            on_stream_event=stream_logger,
             initial_stop_loss=init_sl,
             initial_take_profit=init_tp,
         )
@@ -651,7 +768,7 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
             # Update the root node status to completed
             if app_state["execution_tree"]:
                 app_state["execution_tree"][0]["status"] = "completed"
-                app_state["execution_tree"][0]["content"] = f"✅ Analysis completed successfully!\n\nFinal Decision: {processed_signal}\n\nFull State: {str(final_state)}"
+                app_state["execution_tree"][0]["content"] = f"✅ Analysis completed successfully!\n\nFinal Decision: {processed_signal}\n\nFull State: {str(final_state)}\n\nResults saved to: {results_dir}"
 
     except Exception as e:
         import traceback
@@ -720,6 +837,20 @@ async def read_root():
     template = jinja_env.get_template("index.html")
     today_str = date.today().isoformat()
     return template.render(app_state=app_state, default_date=today_str)
+
+@app.get("/config/providers")
+async def list_providers():
+    """Return provider + model metadata for dynamic UI population."""
+    providers = get_providers()
+    # Reshape to simpler JSON for frontend: {providers: [{key, display_name, models:{quick: [...], deep: [...]}}]}
+    simplified = []
+    for p in providers:
+        simplified.append({
+            "key": p["key"],
+            "display_name": p["display_name"],
+            "models": p.get("models", {}),
+        })
+    return {"providers": simplified}
 
 @app.post("/start", response_class=HTMLResponse)
 async def start_process(
