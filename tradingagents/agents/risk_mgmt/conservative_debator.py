@@ -1,6 +1,7 @@
 from langchain_core.messages import AIMessage
 import time
 import json
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm
 
 
 def create_safe_debator(llm):
@@ -42,8 +43,7 @@ Company Fundamentals Report: {fundamentals_report}
 Here is the current conversation history: {history} Here is the last response from the risky analyst: {current_risky_response} Here is the last response from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints, do not halluncinate and just present your point.
 
 Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting."""
-
-        response = llm.invoke(prompt)
+        response = safe_invoke_llm(llm, prompt)
 
         argument = f"Safe Analyst: {response.content}"
 

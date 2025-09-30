@@ -181,6 +181,23 @@ If you leave these fields blank or select "No Open Position", the system will ge
 5.  Enter a company symbol (e.g., `AAPL`) in the configuration form and click "Start Process" to begin the analysis.
 6.  (Optional) If you have an open position, select Long/Short and enter existing stop-loss / take-profit so the final decision can include management guidance.
 
+### Real-Time Updates (WebSockets)
+
+The web frontend now uses a WebSocket channel (`/ws`) for real-time status and progress updates instead of relying solely on periodic HTTP polling.
+
+Benefits:
+- Lower latency updates as each agent completes
+- Reduced network overhead vs. 2s polling
+- Automatic retry with exponential backoff if the socket drops
+- Graceful fallback to legacy polling if WebSockets are unavailable
+
+Client behavior:
+- On connection, the server sends an `init` payload with the current execution tree and progress.
+- Subsequent incremental updates are sent as `status_update` messages.
+- When you click an item, the existing HTMX request still works; alternatively, the client can request content over the socket using `{ "action": "get_content", "item_id": "..." }`.
+
+If you need to disable WebSockets (e.g., for debugging a proxy), you can block the `/ws` path and the client will automatically revert to polling.
+
 ### Rendered Reports (Markdown Support)
 
 Agent-generated reports (analysis summaries, debate histories, plans, and risk assessments) are produced in Markdown. The web frontend now renders these Markdown documents as styled HTML instead of showing raw markup. This includes support for:
@@ -190,6 +207,52 @@ Agent-generated reports (analysis summaries, debate histories, plans, and risk a
 - Fenced code blocks and inline code
 
 Security: Markdown is sanitized server‑side using `bleach` to strip unsafe tags/attributes while preserving semantic structure. If you need to extend allowed tags (e.g., to permit additional formatting), modify `ALLOWED_TAGS` / `ALLOWED_ATTRIBUTES` in `webapp/main.py`.
+
+### LLM Invocation Reliability (Automatic Retry Layer)
+
+Many agent nodes perform JSON-heavy LLM calls that can occasionally fail due to transient network issues (timeouts, dropped connections) or incomplete JSON payloads returned by the provider. To reduce user-facing errors and noisy red states in the execution tree, TradingAgents wraps model calls with a lightweight exponential backoff retry helper.
+
+Core implementation: `safe_invoke_llm` in `tradingagents/agents/utils/safe_llm.py`.
+
+Default behavior:
+- Retries up to 4 attempts (configurable) on a targeted set of transient exceptions.
+- Backoff: exponential (base 0.75s) with ±30% jitter, capped at 8s.
+- Immediate propagation for non-transient errors (logical / prompt / auth failures aren’t retried).
+
+Transient exception classes handled:
+- `json.JSONDecodeError` (malformed or truncated JSON)
+- `httpx.TimeoutException`
+- `httpx.ConnectError`
+- `httpx.NetworkError` (if available in the installed httpx version)
+- Heuristic: any exception message containing both `Expecting value` and `json` (covers provider-specific wrappers)
+
+Why this matters:
+- Prevents single flaky decode from aborting an entire multi-agent debate or risk evaluation phase.
+- Smooths over brief provider-side instabilities and network blips without user intervention.
+- Reduces false-negative failure attribution in the UI.
+
+Customization:
+You can supply a custom `LLMRetryConfig` if a node needs different resilience parameters:
+```python
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm, LLMRetryConfig
+
+cfg = LLMRetryConfig(max_attempts=6, base_delay=0.5, max_delay=10.0, jitter=0.25)
+response = safe_invoke_llm(llm, prompt, cfg)
+```
+
+Disabling or tightening:
+- To effectively disable retries for debugging, set `max_attempts=1`.
+- For latency-sensitive quick-think paths, you can lower `max_attempts` or `max_delay`.
+
+Logging & observability (future enhancement):
+- Currently, retries are silent except for aggregate timing impact. If you need visibility, wrap `safe_invoke_llm` and add structured logging around each attempt.
+
+Edge cases not retried:
+- Authentication / quota errors
+- Deterministic validation failures in downstream parsing
+- Prompt formatting errors (these should be fixed at the source)
+
+If you encounter a failure pattern you believe should be considered transient, you can extend `TRANSIENT_EXCEPTION_TYPES` inside `safe_llm.py`.
 
 
 ## TradingAgents Package

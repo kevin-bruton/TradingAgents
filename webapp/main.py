@@ -1,5 +1,5 @@
-from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request, Form, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import jinja2
 import markdown as md
@@ -7,6 +7,7 @@ import bleach
 import os
 from typing import Dict, Any
 import threading
+import asyncio
 import time
 from dotenv import load_dotenv
 
@@ -30,6 +31,60 @@ if missing_vars:
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 app = FastAPI()
+
+# Main event loop reference (captured at startup) so threads can schedule coroutines
+MAIN_EVENT_LOOP: asyncio.AbstractEventLoop | None = None
+
+@app.on_event("startup")
+async def _capture_loop():
+    global MAIN_EVENT_LOOP
+    MAIN_EVENT_LOOP = asyncio.get_event_loop()
+
+# ==============================================
+# WebSocket Connection Management
+# ==============================================
+class ConnectionManager:
+    """Tracks active websocket connections and allows broadcast of messages."""
+    def __init__(self):
+        self._connections: set[WebSocket] = set()
+        self._lock = threading.Lock()
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        with self._lock:
+            self._connections.add(websocket)
+
+    def disconnect_sync(self, websocket: WebSocket):
+        # Called from sync context in finally blocks
+        with self._lock:
+            if websocket in self._connections:
+                self._connections.remove(websocket)
+
+    async def disconnect(self, websocket: WebSocket):
+        with self._lock:
+            if websocket in self._connections:
+                self._connections.remove(websocket)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
+    async def broadcast_json(self, payload: dict):
+        """Broadcast JSON payload to all active connections, pruning dead ones."""
+        to_remove = []
+        with self._lock:
+            conns = list(self._connections)
+        for ws in conns:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                to_remove.append(ws)
+        if to_remove:
+            with self._lock:
+                for ws in to_remove:
+                    self._connections.discard(ws)
+
+manager = ConnectionManager()
 
 # In-memory storage for the process state
 # Using a lock for thread-safe access to app_state
@@ -79,6 +134,27 @@ def render_markdown(value: str) -> str:
     return cleaned
 
 jinja_env.filters['markdown'] = render_markdown
+
+async def _broadcast_status_locked_unlocked():
+    """Helper to broadcast status updates using existing helper logic."""
+    status_updates = {}
+    def extract_status_info(items):
+        for item in items:
+            status_updates[item["id"]] = {
+                "status": item["status"],
+                "status_icon": get_status_icon(item["status"])
+            }
+            if item.get("children"):
+                extract_status_info(item["children"])
+    with app_state_lock:
+        extract_status_info(app_state.get("execution_tree", []))
+        payload = {
+            "type": "status_update",
+            "status_updates": status_updates,
+            "overall_progress": app_state.get("overall_progress", 0),
+            "overall_status": app_state.get("overall_status", "idle")
+        }
+    await manager.broadcast_json(payload)
 
 def update_execution_state(state: Dict[str, Any]):
     """Callback function to update the app_state based on LangGraph's state."""
@@ -190,6 +266,14 @@ def update_execution_state(state: Dict[str, Any]):
         app_state["overall_progress"] = min(100, int((completed_agents / max(total_agents, 1)) * 100))
 
         print(f"📊 Progress updated: {app_state['overall_progress']}% ({completed_agents}/{total_agents} agents)")
+
+    # Fire-and-forget broadcast using main loop even when we're in a worker thread
+    try:
+        if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+            asyncio.run_coroutine_threadsafe(_broadcast_status_locked_unlocked(), MAIN_EVENT_LOOP)
+    except Exception as _e:
+        # Silently ignore broadcast issues; optionally log
+        pass
 
 def initialize_complete_execution_tree():
     """Initialize the complete execution tree with all agents in pending state."""
@@ -332,6 +416,30 @@ def find_agent_in_tree(agent_id: str, tree: list):
                 if agent["id"] == agent_id:
                     return agent
     return None
+
+def mark_agent_error(agent_id: str, error_message: str):
+    """Mark a specific agent (and its phase) as error with provided message."""
+    execution_tree = app_state.get("execution_tree", [])
+    target_agent = find_agent_in_tree(agent_id, execution_tree)
+    if not target_agent:
+        return False
+    # Mark agent
+    target_agent["status"] = "error"
+    target_agent["content"] = f"❌ {target_agent['name']} - Error encountered\n\n{error_message}"
+    # Mark any children as error for clarity
+    for child in target_agent.get("children", []):
+        if child["status"] != "completed":
+            child["status"] = "error"
+            if not child.get("content"):
+                child["content"] = "Error in parent agent"
+    # Mark containing phase error
+    for phase in execution_tree:
+        if phase.get("children") and any(c is target_agent for c in phase["children"]):
+            phase["status"] = "error"
+            if not phase.get("content") or "Error" not in phase["content"]:
+                phase["content"] = f"❌ {phase['name']} - Error in {target_agent['name']}"
+            break
+    return True
 
 def find_item_by_id(item_id: str, items: list):
     """Find an item by ID in a list of items."""
@@ -548,24 +656,62 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any]):
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
+        # Attempt to extract agent name from traceback (LangGraph style: "During task with name 'Risk Judge'")
+        import re
+        agent_name = None
+        m = re.search(r"During task with name '([^']+)'", error_detail)
+        if m:
+            agent_name = m.group(1)
+        # Map human-readable agent name to internal agent_id used in tree
+        name_to_id = {
+            "Market Analyst": "market_analyst",
+            "Social Analyst": "social_analyst",
+            "News Analyst": "news_analyst",
+            "Fundamentals Analyst": "fundamentals_analyst",
+            "Bull Researcher": "bull_researcher",
+            "Bear Researcher": "bear_researcher",
+            "Research Manager": "research_manager",
+            "Trade Planner": "trade_planner",
+            "Trader": "trader",
+            "Risky Analyst": "risky_analyst",
+            "Neutral Analyst": "neutral_analyst",
+            "Safe Analyst": "safe_analyst",
+            "Risk Judge": "risk_judge"
+        }
+        mapped_agent_id = name_to_id.get(agent_name) if agent_name else None
         with app_state_lock:
             app_state["overall_status"] = "error"
             app_state["overall_progress"] = 100
-            if app_state["execution_tree"]:
+            # Mark specific agent if identified; else attach error to root phase (first)
+            if mapped_agent_id and mark_agent_error(mapped_agent_id, f"Error during execution: {str(e)}"):
+                pass
+            elif app_state["execution_tree"]:
                 app_state["execution_tree"][0]["status"] = "error"
                 app_state["execution_tree"][0]["content"] = f"Error during execution: {str(e)}\n\n{error_detail}"
-            # Add a specific error item to the tree
+            # Always append detailed error node for inspection
             app_state["execution_tree"].append({
                 "id": "error",
-                "name": "Process Error",
+                "name": f"Process Error{(' - ' + agent_name) if agent_name else ''}",
                 "status": "error",
                 "content": f"Error during execution: {str(e)}\n\n{error_detail}",
                 "children": [],
                 "timestamp": time.time()
             })
+        # Immediate broadcast of error state
+        if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(_broadcast_status_locked_unlocked(), MAIN_EVENT_LOOP)
+            except Exception:
+                pass
     finally:
         with app_state_lock:
             app_state["process_running"] = False
+        # Final broadcast to push terminal status
+        if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+            try:
+                asyncio.run_coroutine_threadsafe(_broadcast_status_locked_unlocked(), MAIN_EVENT_LOOP)
+            except Exception:
+                pass
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -577,7 +723,7 @@ async def read_root():
 
 @app.post("/start", response_class=HTMLResponse)
 async def start_process(
-    background_tasks: BackgroundTasks, 
+    background_tasks: BackgroundTasks,  # kept for backward compat; no longer used for long task
     company_symbol: str = Form(...),
     llm_provider: str = Form(...), 
     quick_think_llm: str = Form(...),
@@ -655,7 +801,9 @@ async def start_process(
         # Initialize execution tree with complete structure
         app_state["execution_tree"] = initialize_complete_execution_tree()
 
-    background_tasks.add_task(run_trading_process, company_symbol, app_state["config"])
+    # Launch heavy propagation in its own daemon thread so FastAPI loop remains responsive for websockets
+    worker = threading.Thread(target=run_trading_process, args=(company_symbol, app_state["config"]), daemon=True)
+    worker.start()
     
     template = jinja_env.get_template("_partials/left_panel.html")
     return template.render(tree=app_state["execution_tree"], app_state=app_state)
@@ -669,27 +817,75 @@ async def get_status():
 
 @app.get("/status-updates")
 async def get_status_updates():
-    """Return only the status updates as JSON for targeted updates."""
+    """Legacy endpoint for polling (kept as fallback)."""
+    status_updates = {}
+    def extract_status_info(items):
+        for item in items:
+            status_updates[item["id"]] = {
+                "status": item["status"],
+                "status_icon": get_status_icon(item["status"])
+            }
+            if item.get("children"):
+                extract_status_info(item["children"])
     with app_state_lock:
-        status_updates = {}
-        
-        def extract_status_info(items, prefix=""):
-            for item in items:
-                item_id = item["id"]
-                status_updates[item_id] = {
-                    "status": item["status"],
-                    "status_icon": get_status_icon(item["status"])
-                }
-                if item.get("children"):
-                    extract_status_info(item["children"])
-        
-        extract_status_info(app_state["execution_tree"])
-        
-        return {
+        extract_status_info(app_state.get("execution_tree", []))
+        return JSONResponse({
             "status_updates": status_updates,
-            "overall_progress": app_state["overall_progress"],
-            "overall_status": app_state["overall_status"]
-        }
+            "overall_progress": app_state.get("overall_progress", 0),
+            "overall_status": app_state.get("overall_status", "idle")
+        })
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """Primary realtime channel.
+    Client should expect messages of forms:
+      {"type": "status_update", ...} - incremental
+      {"type": "init", execution_tree: [...], overall_progress, overall_status}
+      {"type": "content", item_id, html}
+      {"type": "error", message}
+    Client can send: {"action": "subscribe"} (ignored) or {"action": "get_content", "item_id": id}
+    """
+    await manager.connect(websocket)
+    try:
+        # Send initial snapshot
+        with app_state_lock:
+            init_payload = {
+                "type": "init",
+                "execution_tree_html": jinja_env.get_template("_partials/left_panel.html").render(tree=app_state.get("execution_tree", []), app_state=app_state),
+                "overall_progress": app_state.get("overall_progress", 0),
+                "overall_status": app_state.get("overall_status", "idle"),
+            }
+        await websocket.send_json(init_payload)
+
+        while True:
+            data = await websocket.receive_json()
+            action = data.get("action")
+            if action == "ping":
+                await websocket.send_json({"type": "pong"})
+            elif action == "get_content":
+                item_id = data.get("item_id")
+                if not item_id:
+                    await websocket.send_json({"type": "error", "message": "item_id required"})
+                    continue
+                with app_state_lock:
+                    item = find_item_in_tree(item_id, app_state.get("execution_tree", []))
+                    if item:
+                        html = jinja_env.get_template("_partials/right_panel.html").render(content=item.get("content", "No content available."))
+                        await websocket.send_json({"type": "content", "item_id": item_id, "html": html})
+                    else:
+                        await websocket.send_json({"type": "error", "message": f"Item {item_id} not found"})
+            else:
+                # ignore or echo
+                await websocket.send_json({"type": "ack", "received": action})
+    except WebSocketDisconnect:
+        manager.disconnect_sync(websocket)
+    except Exception as e:
+        # Attempt to notify client
+        try:
+            await websocket.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+        manager.disconnect_sync(websocket)
 
 def get_status_icon(status: str) -> str:
     """Get the status icon for a given status."""

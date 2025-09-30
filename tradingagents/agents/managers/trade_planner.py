@@ -1,4 +1,5 @@
 import json
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm
 
 def create_trade_planner_agent(llm, toolkit):
     def trade_planner_node(state) -> dict:
@@ -43,8 +44,7 @@ Based on your analysis, provide the stop-loss and take-profit levels in a JSON f
 The stop-loss level is mandatory. The take-profit level is optional.
 Do not provide any other information or explanation.
 '''
-
-        response = llm.invoke(prompt)
+        response = safe_invoke_llm(llm, prompt)
 
         try:
             levels = json.loads(response.content)
@@ -53,7 +53,6 @@ Do not provide any other information or explanation.
         except (json.JSONDecodeError, AttributeError):
             stop_loss = None
             take_profit = None
-
 
         return {
             "stop_loss": stop_loss,
