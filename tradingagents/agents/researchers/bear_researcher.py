@@ -1,6 +1,7 @@
 from langchain_core.messages import AIMessage
 import time
 import json
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm
 
 
 def create_bear_researcher(llm, memory):
@@ -53,8 +54,7 @@ Last bull argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}
 Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock. You must also address reflections and learn from lessons and mistakes you made in the past.
 """
-
-        response = llm.invoke(prompt)
+        response = safe_invoke_llm(llm, prompt)
 
         argument = f"Bear Analyst: {response.content}"
 

@@ -1,6 +1,7 @@
 import functools
 import time
 import json
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm
 
 
 def create_trader(llm, memory):
@@ -48,8 +49,7 @@ Your output should always be in markdown format.""",
             },
             context,
         ]
-
-        result = llm.invoke(messages)
+        result = safe_invoke_llm(llm, messages)
 
         return {
             "messages": [result],

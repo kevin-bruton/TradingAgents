@@ -1,5 +1,6 @@
 import time
 import json
+from tradingagents.agents.utils.safe_llm import safe_invoke_llm
 
 
 def create_risk_manager(llm, memory):
@@ -57,7 +58,7 @@ Deliverables:
 ---
 
 Focus on actionable insights and continuous improvement. Build on past lessons, critically evaluate all perspectives, and ensure each decision advances better outcomes."""
-        response = llm.invoke(prompt)
+        response = safe_invoke_llm(llm, prompt)
 
         final_decision_content = response.content
         new_risk_debate_state = {

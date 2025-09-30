@@ -94,6 +94,132 @@
     </div>
     
     <script>
+        // =============================
+        // Real-time WebSocket Handling
+        // =============================
+        let ws = null;
+        let wsConnected = false;
+        let manualPollingFallback = false; // set true if websocket fails
+        let reconnectAttempts = 0;
+        const maxReconnectDelay = 15000;
+
+        function websocketUrl() {
+            const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+            return proto + '://' + window.location.host + '/ws';
+        }
+
+        function connectWebSocket() {
+            try {
+                ws = new WebSocket(websocketUrl());
+            } catch (e) {
+                console.warn('[ws] construction failed', e);
+                enablePollingFallback();
+                return;
+            }
+
+            ws.addEventListener('open', () => {
+                wsConnected = true;
+                reconnectAttempts = 0;
+                console.debug('[ws] connected');
+                // Stop polling if running
+                stopTargetedUpdates();
+            });
+
+            ws.addEventListener('close', () => {
+                wsConnected = false;
+                console.debug('[ws] closed');
+                if (!manualPollingFallback) scheduleReconnect();
+                else startTargetedUpdates();
+            });
+
+            ws.addEventListener('error', (err) => {
+                console.warn('[ws] error', err);
+            });
+
+            ws.addEventListener('message', (event) => {
+                let data;
+                try { data = JSON.parse(event.data); } catch { return; }
+                if (data.type === 'init') {
+                    // Replace left panel execution tree HTML from snapshot
+                    if (data.execution_tree_html) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(data.execution_tree_html, 'text/html');
+                        const newTree = doc.querySelector('#execution-tree')?.parentElement; // container has other elems
+                        if (newTree) {
+                            // We only want the execution tree + progress bar content from the snapshot
+                            const leftPanel = document.getElementById('left-panel');
+                            if (leftPanel) {
+                                // Preserve configuration form while updating status section
+                                // So we extract only the <ul class="execution-tree"> element and progress bars
+                                const existingTree = leftPanel.querySelector('.execution-tree');
+                                const incomingTree = doc.querySelector('.execution-tree');
+                                if (existingTree && incomingTree) {
+                                    existingTree.replaceWith(incomingTree);
+                                } else if (!existingTree && incomingTree) {
+                                    leftPanel.appendChild(incomingTree);
+                                }
+                                // Progress elements out-of-band updates - just set directly
+                                if (typeof data.overall_progress === 'number') updateOverallProgress(data.overall_progress, data.overall_status);
+                            }
+                        }
+                    }
+                } else if (data.type === 'status_update') {
+                    applyStatusUpdate(data);
+                } else if (data.type === 'content') {
+                    // Content panel update
+                    const right = document.getElementById('right-panel');
+                    if (right) {
+                        right.innerHTML = data.html;
+                    }
+                }
+            });
+        }
+
+        function scheduleReconnect() {
+            reconnectAttempts += 1;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
+            console.debug('[ws] reconnect in', delay);
+            setTimeout(() => {
+                if (!wsConnected) connectWebSocket();
+            }, delay);
+            // Meanwhile start fallback polling after a short grace
+            if (!manualPollingFallback) {
+                setTimeout(() => {
+                    if (!wsConnected) enablePollingFallback();
+                }, 2500);
+            }
+        }
+
+        function enablePollingFallback() {
+            if (manualPollingFallback) return; // already enabled
+            manualPollingFallback = true;
+            console.debug('[fallback] enabling polling');
+            startTargetedUpdates();
+        }
+
+        function applyStatusUpdate(data) {
+            if (!data) return;
+            updateOverallProgress(data.overall_progress, data.overall_status);
+            const updates = data.status_updates || {};
+            for (const [itemId, statusInfo] of Object.entries(updates)) {
+                const statusIcon = document.querySelector(`[hx-get="/content/${itemId}"] .status-icon`);
+                if (statusIcon && statusIcon.textContent !== statusInfo.status_icon) {
+                    statusIcon.textContent = statusInfo.status_icon;
+                    const processItem = statusIcon.closest('.process-item');
+                    if (processItem) {
+                        processItem.classList.remove('status-pending', 'status-in_progress', 'status-completed', 'status-error');
+                        processItem.classList.add('status-' + statusInfo.status);
+                    }
+                }
+            }
+        }
+
+        function updateOverallProgress(progress, status) {
+            const progressBar = document.getElementById('overall-progress-bar');
+            const progressText = document.getElementById('overall-progress-text');
+            if (progressBar && typeof progress === 'number') progressBar.style.width = progress + '%';
+            if (progressText) progressText.textContent = progress + '% (' + status + ')';
+        }
         // Model options for each provider
         const modelOptions = {
             "openai": {
@@ -321,39 +447,16 @@
 
         // Targeted status updates to prevent flickering
         function updateStatusIndicators() {
+            // Fallback polling (legacy)
+            if (wsConnected) return; // skip if websocket active
             fetch('/status-updates')
-                .then(response => response.json())
-                .then(data => {
-                    // Update overall progress
-                    const progressBar = document.getElementById('overall-progress-bar');
-                    const progressText = document.getElementById('overall-progress-text');
-                    if (progressBar) {
-                        progressBar.style.width = data.overall_progress + '%';
-                    }
-                    if (progressText) {
-                        progressText.textContent = data.overall_progress + '% (' + data.overall_status + ')';
-                    }
-
-                    // Update individual status icons
-                    for (const [itemId, statusInfo] of Object.entries(data.status_updates)) {
-                        const statusIcon = document.querySelector(`[hx-get="/content/${itemId}"] .status-icon`);
-                        if (statusIcon && statusIcon.textContent !== statusInfo.status_icon) {
-                            statusIcon.textContent = statusInfo.status_icon;
-                            
-                            // Update the parent item's CSS class
-                            const processItem = statusIcon.closest('.process-item');
-                            if (processItem) {
-                                // Remove old status classes
-                                processItem.classList.remove('status-pending', 'status-in_progress', 'status-completed', 'status-error');
-                                // Add new status class
-                                processItem.classList.add('status-' + statusInfo.status);
-                            }
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.log('Status update failed:', error);
-                });
+              .then(r => r.json())
+              .then(data => applyStatusUpdate({
+                status_updates: data.status_updates,
+                overall_progress: data.overall_progress,
+                overall_status: data.overall_status
+              }))
+              .catch(err => console.log('Status update failed:', err));
         }
 
         // Start targeted updates when execution tree is present
@@ -379,8 +482,10 @@
             setCurrentDate();
             updateModelOptions(); // Set initial model options for OpenRouter
             
-            // Start targeted updates if execution tree is already present
-            startTargetedUpdates();
+            // Try to establish websocket connection
+            connectWebSocket();
+            // Start polling only if websocket not yet connected after short delay
+            setTimeout(() => { if (!wsConnected) startTargetedUpdates(); }, 1200);
         });
 
         // Handle when new content is loaded (like when starting a process)
@@ -389,9 +494,11 @@
                 if (window.savedExpansionState) {
                     restoreExpansionState(window.savedExpansionState);
                 }
-                // Start or restart targeted updates when new content is loaded
-                stopTargetedUpdates();
-                startTargetedUpdates();
+                // If websocket connected, no need to restart polling
+                if (!wsConnected) {
+                    stopTargetedUpdates();
+                    startTargetedUpdates();
+                }
             }
         });
     </script>
