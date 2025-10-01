@@ -3,10 +3,9 @@
 > Progress Status (updated)
 > - ✅ Completed: RunManager core; results directory seconds + RUN_ID marker; webapp multi-run refactor; multi-run REST endpoints; WebSocket run_id support (aggregate + focused); cancellation mechanism; CLI parallel multi-ticker mode; global LLM concurrency semaphore; frontend tab UI with per-run cancel; REST & WebSocket integration tests; automatic pruning + results retention scheduler (with days-based retention variable); README & plan synchronization.
 > - ✅ Completed (recent): WebSocket diff/patch optimization (status_patch_run) + resync recovery; decision rendering panel enrichment (final decision content & HTML in focused run tab).
-> - ✅ Completed (latest): Run metrics endpoint (aggregate stats + phase timing) with /metrics/runs API & frontend panel (lightweight polling).
 > - ✅ Completed (new): Streaming message/tool log lines over WebSocket (ring buffer + incremental + snapshot recovery).
-> - ✅ Completed (extended tests batch): Added automated coverage for status diff patch sequencing + resync snapshot, content append/replace patch logic, phase metrics (start/end ordering), cancellation race (immediate + post in_progress), and UI smoke (config + tree injection markers). All tests passing.
-> - ⏳ Pending: execution tree deeper nested tools; phase-level timing aggregation visualization (metrics recorded but not rendered); timed diff patches for timing-only deltas; content patch resync snapshot integration; enhanced decision panel (advanced sizing model & real risk analytics); provider/model-specific concurrency tiers; historical run index manifest; UI state persistence (tree expansion, active selection, config collapse memory); optional concurrency limiter snapshot unit test; decision metrics instrumentation.
+> - ✅ Completed (extended tests batch): Added automated coverage for status diff patch sequencing + resync snapshot, content append/replace patch logic, cancellation race (immediate + post in_progress), and UI smoke (config + tree injection markers). All tests passing.
+> - ⏳ Pending: execution tree deeper nested tools; timed diff patches for timing-only deltas; content patch resync snapshot integration; enhanced decision panel (advanced sizing model & real risk analytics); provider/model-specific concurrency tiers; historical run index manifest; UI state persistence (tree expansion, active selection, config collapse memory); optional concurrency limiter snapshot unit test.
 > - 💤 Deferred / Nice-to-Have: historical run index JSON.
 
 > Goal: Extend current single-instrument TradingAgents execution (CLI + Web) to support concurrent, isolated runs for multiple tickers ("instruments") executing in parallel, each with independent state, progress tracking, logging, and persisted results.
@@ -48,11 +47,10 @@
   - ✅ Implemented new targeted test modules:
     * `tests/test_status_patches.py` – status patch sequence increments, new node detection, resync snapshot (no seq bump), no-op stability.
     * `tests/test_content_patches.py` – append vs replace detection, multi-node sequencing, no-change stability.
-    * `tests/test_phase_metrics.py` – phase start/end presence and ordering, deferred phases untouched.
     * `tests/test_cancellation_race.py` – immediate cancellation before progress & post in_progress transition idempotency.
     * `tests/test_ui_smoke.py` – index load + multi-run form + websocket script markers + feature flags.
   - ✅ Full suite passes (`uv run pytest -q`).
-  - ⏳ Remaining (optional): concurrency limiter direct snapshot test; log streaming gap recovery end-to-end (currently indirectly covered by patch/core unit tests); decision metrics instrumentation test hooks.
+  - ⏳ Remaining (optional): concurrency limiter direct snapshot test; log streaming gap recovery end-to-end (currently indirectly covered by patch/core unit tests).
 7. UI State Persistence
   - localStorage for config collapse state, last-active run, selected tree node, filter preferences.
 
@@ -442,8 +440,6 @@ Implemented baseline: Unit tests for `RunManager` (create, list, limit, cancel, 
 - [x] Web UI gives option on each tab to cancel individual executions.
 - [x] Tests cover manager, concurrency (semaphore), persistence, and integration (REST + WebSocket).
 - [x] Final decision auto-renders in focused run tab upon completion (WebSocket message with `decision_html`).
- - [x] /metrics/runs endpoint returns aggregate counts and averages.
- - [x] Frontend metrics panel displays counts & average durations with periodic polling.
  - [x] Streaming log lines appear in UI within <1s (target) via `log_append_run` messages.
  - [x] Log snapshot (`log_snapshot_run`) available on gap (auto) or manual request (`log_dump`).
  - [x] Ring buffer per run enforces max lines (config `LOG_BUFFER_MAX_LINES`); memory bound respected.
@@ -456,19 +452,7 @@ Implemented baseline: Unit tests for `RunManager` (create, list, limit, cancel, 
 - Execution Tree: Structured representation of agent/tool phases and their statuses.
 
 ---
-## 24. Completed Task: Run Metrics Endpoint & Phase Timing
-
-Implemented `/metrics/runs` endpoint with aggregation of counts, average total duration, per-phase averages, and semaphore configuration. Instrumentation tracks per-phase start/end and run start/end. Frontend lightweight panel polls and displays summary.
-
-### Delivered Artifacts
-- Backend metrics recording helper (`_update_run_metrics`) & terminal marker (`_mark_run_terminal`).
-- Aggregation route with JSON schema documented.
-- Frontend polling panel (counts + averages).
-
-### Follow-up Ideas
-- Add median/p95 durations; export CSV; include per-ticker aggregates.
-
-## 25. Completed Task: Streaming Message / Tool Log Lines over WebSocket
+## 24. Completed Task: Streaming Message / Tool Log Lines over WebSocket
 
 ### Rationale
 Provide near real-time visibility into agent message flow and tool usage without requiring filesystem access, improving debugging and UX.

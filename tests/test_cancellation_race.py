@@ -26,9 +26,7 @@ def test_immediate_cancellation_before_progress():
     assert canceled, 'Cancellation should succeed'
     run = run_manager.get_run(run_id)
     assert run['status'] == 'canceled'
-    # Metrics: run_start likely None since never went in_progress
-    metrics = run.get('metrics', {})
-    assert metrics.get('run_start') is None
+    # Metrics removed: no run_start field expected
     # Ensure idempotency: second cancel returns False
     assert not run_manager.cancel_run(run_id)
 

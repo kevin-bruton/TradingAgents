@@ -4,7 +4,7 @@ import pytest
 from tradingagents.agents.utils.memory import FinancialSituationMemory
 
 class DummySentenceTransformer:
-    def __init__(self, name):
+    def __init__(self, name, **kwargs):  # accept device or other ignored kwargs
         self.name = name
     def encode(self, text, convert_to_tensor=False):
         return [float(len(text))]

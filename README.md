@@ -250,6 +250,35 @@ Agent-generated reports (analysis summaries, debate histories, plans, and risk a
 
 Security: Markdown is sanitized server‑side using `bleach` to strip unsafe tags/attributes while preserving semantic structure. If you need to extend allowed tags (e.g., to permit additional formatting), modify `ALLOWED_TAGS` / `ALLOWED_ATTRIBUTES` in `webapp/main.py`.
 
+#### Math / LaTeX Formulas
+
+Display and inline math in reports are rendered via KaTeX on the client. Use any of these delimiters:
+
+* Display: `$$ ... $$` or `\\[ ... \\]`
+* Inline: `$ ... $` or `\\( ... \\)`
+
+Tips & common pitfalls:
+
+1. Use double backslashes for line breaks inside display math: `\\\\` (KaTeX treats a single `\\` as a newline already inside an environment; outside an environment you often want an alignment environment instead).
+2. Escape percent signs as `\\%` inside math to avoid LaTeX comments truncating the expression.
+3. Wrap prose labels with `\\text{...}` and avoid leading spaces: `\\text{Gross profit}` not `\\text{ gross profit}`.
+4. Prefer alignment for multi-line derivations:
+
+```
+$$
+\begin{aligned}
+(272.0 - 254.63) &= 17.37 \\
+	ext{Net profit} &= 17.37 - (2.0 \times 2) = 13.37 \\
+	ext{Return} &= \frac{13.37}{254.63} = 5.25\%
+\end{aligned}
+$$
+```
+
+5. Dynamically loaded (non-streaming) content now triggers an explicit math render pass; previously only streaming patch updates did.
+6. Rendering errors are suppressed (`throwOnError:false`). If an expression fails, simplify or remove delimiters to debug.
+
+Extend or customize delimiters/macros by editing `scheduleMathRender` in `webapp/templates/index.html`.
+
 ### Persistent Run Artifacts (Results Directory)
 
 Each execution (CLI or Web) now creates a timestamped results folder to retain logs and generated Markdown reports for later review.
@@ -481,7 +510,7 @@ Final portfolio decision is normalized into a structured, versioned schema inclu
 Layered concurrency limiter controls outbound LLM calls:
 - Global limit via `LLM_MAX_CONCURRENCY`.
 - Per-provider and provider:model granular constraints via `LLM_PROVIDER_LIMITS` (e.g. `openai:6,anthropic:3,openai:gpt-4o:2`).
-- Metrics endpoint `/metrics/concurrency` exposes live utilization snapshot.
+<!-- Removed metrics endpoint reference: previously exposed live utilization snapshot. -->
 
 Future additions: adaptive tuning (lower limits on burst 429s), hot-reload, UI surfacing.
 

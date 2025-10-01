@@ -47,14 +47,6 @@ class RunManager:
                 "thread": None,
                 "results_path": results_path,
                 "cancellation_flag": False,
-                # Metrics / instrumentation fields
-                "metrics": {
-                    "run_start": None,      # timestamp when first transitions to in_progress
-                    "run_end": None,        # timestamp when enters terminal state
-                    "phases": {             # per-phase timing: {phase_id: {start: ts, end: ts}}
-                        # filled lazily
-                    }
-                }
             }
             return run_id
 

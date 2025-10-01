@@ -525,7 +525,7 @@ async def _broadcast_status_locked_unlocked():
 
 def update_execution_state(state: Dict[str, Any], run_id: str | None = None):
     """Callback to merge new partial state into the appropriate execution tree (single or multi-run)."""
-    print(f"📡 Callback received state keys: {list(state.keys())} run_id={run_id}")
+    #print(f"📡 Callback received state keys: {list(state.keys())} run_id={run_id}")
 
     agent_state_mapping = {
         "Market Analyst": {"phase": "data_collection", "agent_id": "market_analyst", "report_key": "market_report", "report_name": "Market Analysis Report"},
@@ -570,7 +570,7 @@ def update_execution_state(state: Dict[str, Any], run_id: str | None = None):
         completed_agents = count_completed_agents(execution_tree)
         overall_progress = min(100, int((completed_agents / max(total_agents, 1)) * 100))
         run_manager.update_run(run_id, execution_tree=execution_tree, overall_progress=overall_progress, status=(run.get("status") or "in_progress"))
-        _update_run_metrics(run_id, execution_tree)
+    # Metrics removed: previously updated run metrics here
         # In multi-run mode we will broadcast later in enhanced websocket step; send minimal legacy broadcast for compatibility
         try:
             if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
@@ -669,7 +669,8 @@ def make_update_callback(run_id: str):
                             pass
                     # Update metrics after broadcasting patch (non-terminal)
                     try:
-                        _update_run_metrics(run_id, run.get("execution_tree", []))
+                        # Metrics removed: previously updated run metrics here
+                        pass
                     except Exception:
                         pass
                     await manager.broadcast_json(payload)
@@ -1470,7 +1471,8 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
             run_manager.update_run(run_id, status="completed", overall_progress=100, final_decision=processed_signal)
             # Mark run end metric
             try:
-                _mark_run_terminal(run_id)
+                # Metrics removed: previously marked run terminal for metrics
+                pass
             except Exception:
                 pass
         else:
@@ -1529,11 +1531,13 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
                 except Exception:
                     pass
             try:
-                _mark_run_terminal(run_id)
+                # Metrics removed: previously marked run terminal for metrics
+                pass
             except Exception:
                 pass
             try:
-                _mark_run_terminal(run_id)
+                # Metrics removed: previously marked run terminal for metrics
+                pass
             except Exception:
                 pass
         else:
@@ -1560,114 +1564,7 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
             except Exception:
                 pass
 
-# ==============================================
-# Metrics / Instrumentation Helpers
-# ==============================================
-PHASE_IDS = [
-    "data_collection_phase",
-    "research_phase",
-    "planning_phase",
-    "execution_phase",
-    "risk_analysis_phase",
-    "final_decision_phase",
-]
-
-def _update_run_metrics(run_id: str, execution_tree: list):
-    """Capture phase start/end times and run start if not set.
-    Called on each state update / patch emission.
-    """
-    run = run_manager.get_run(run_id)
-    if not run:
-        return
-    metrics = run.get("metrics") or {}
-    phases_metrics = metrics.setdefault("phases", {})
-    now = time.time()
-    # Run start detection: first transition to in_progress
-    if metrics.get("run_start") is None and run.get("status") in ("in_progress", "completed", "error", "canceled"):
-        metrics["run_start"] = now
-    # Phase traversal
-    phase_map = {p.get("id"): p for p in execution_tree}
-    for pid in PHASE_IDS:
-        phase = phase_map.get(pid)
-        if not phase:
-            continue
-        pm = phases_metrics.setdefault(pid, {"start": None, "end": None})
-        st = phase.get("status")
-        # Start when it leaves pending
-        if pm["start"] is None and st in ("in_progress", "completed", "error", "canceled"):
-            pm["start"] = now
-        # End when terminal or completed
-        if pm["end"] is None and st in ("completed", "error", "canceled"):
-            # ensure all children terminal or status ended
-            children = phase.get("children", [])
-            if all(c.get("status") in ("completed", "error", "canceled") for c in children):
-                pm["end"] = now
-    # Persist metrics back
-    run_manager.update_run(run_id, metrics=metrics)
-
-def _mark_run_terminal(run_id: str):
-    run = run_manager.get_run(run_id)
-    if not run:
-        return
-    metrics = run.get("metrics") or {}
-    if metrics.get("run_end") is None:
-        metrics["run_end"] = time.time()
-        run_manager.update_run(run_id, metrics=metrics)
-
-@app.get("/metrics/runs")
-async def metrics_runs():
-    """Return aggregate metrics across runs.
-    Schema:
-    {
-      counts: {active, completed, error, canceled, total},
-      avg_total_duration_sec: float|None,
-      avg_phase_durations_sec: {phase_id: float},
-      semaphore: {max: int, approx_current: int|null},
-      updated_at: epoch
-    }
-    """
-    runs = run_manager.list_runs(summary_only=False)
-    now = time.time()
-    counts = {"active":0, "completed":0, "error":0, "canceled":0, "total": len(runs)}
-    total_durations = []
-    phase_durations: dict[str, list[float]] = {pid: [] for pid in PHASE_IDS}
-    for r in runs:
-        status = r.get("status")
-        if status in ("pending", "in_progress"):
-            counts["active"] += 1
-        elif status == "completed":
-            counts["completed"] += 1
-        elif status == "error":
-            counts["error"] += 1
-        elif status == "canceled":
-            counts["canceled"] += 1
-        metrics = r.get("metrics") or {}
-        rs = metrics.get("run_start")
-        re = metrics.get("run_end")
-        if rs and re and re >= rs:
-            total_durations.append(re - rs)
-        phases = (metrics.get("phases") or {})
-        for pid, pm in phases.items():
-            s = pm.get("start")
-            e = pm.get("end")
-            if pid in phase_durations and s and e and e >= s:
-                phase_durations[pid].append(e - s)
-    avg_total = sum(total_durations)/len(total_durations) if total_durations else None
-    avg_phases = {pid: (sum(vals)/len(vals) if vals else None) for pid, vals in phase_durations.items()}
-    # Semaphore utilization (best effort) – we may not have direct handle; return configured max
-    import os
-    try:
-        max_conc = int(os.getenv("LLM_MAX_CONCURRENCY", "0")) or None
-    except ValueError:
-        max_conc = None
-    resp = {
-        "counts": counts,
-        "avg_total_duration_sec": avg_total,
-        "avg_phase_durations_sec": avg_phases,
-        "semaphore": {"max": max_conc, "approx_current": None},
-        "updated_at": now,
-    }
-    return resp
+# Run metrics removed: previously instrumentation helpers & /metrics/runs endpoint
 
 
 @app.get("/", response_class=HTMLResponse)
