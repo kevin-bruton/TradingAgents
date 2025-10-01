@@ -17,14 +17,10 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-mll67QQIadC0h8dwF5EYh3QnqTP0TO+GfY+3CX6TtGZVvZ1tcHTfbvZW8FU7c7W0" crossorigin="anonymous"></script>
 </head>
 <body>
-    <div id="overall-progress-container">
-        <div id="overall-progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-    </div>
     <div id="main-content">
     <div id="left-panel" class="layout-left">
             <div id="config-header" class="config-header">
-                <h2 style="display:inline-block; margin:0;">Configuration</h2>
-                <button id="config-toggle" type="button" class="config-toggle-btn" aria-expanded="true" aria-controls="config-form" onclick="toggleConfigPanel()">Hide</button>
+                <h2 style="display:inline-block; margin:0;">Trading Agents</h2>
             </div>
             <div id="config-form" class="config-open">
                 <h3 style="margin-top:0;">Multi-Run Configuration</h3>
@@ -214,12 +210,7 @@
                     loadRunTree(data.run_id, data);
                     if (!window.runPatchState) window.runPatchState = {};
                     window.runPatchState[data.run_id] = { seq: data.seq || 0 };
-                        panel.innerHTML = `<div class=\"right-panel-inner\"><div class=\"content-header\"><h3>${itemId.replace(/_(messages|report)$/,'')} ${itemId.endsWith('_messages')?'Messages':'Report'}</h3></div><div class=\"content-body\">${cached ? cached : '<em>Streaming...</em>'}</div></div>`;
-                        // If cached already contains math delimiters, schedule render (stream patches also trigger renders)
-                        if (cached) {
-                            const bodyEl = panel.querySelector('.content-body');
-                            if (bodyEl && contentHasRenderableMath(bodyEl.textContent)) scheduleMathRender(bodyEl);
-                        }
+                    // (Removed invalid panel update referencing undefined variables panel/itemId/cached)
                 } else if (data.type === 'log_append_run') {
                     handleRunLogAppend(data);
                 } else if (data.type === 'log_snapshot_run') {
@@ -305,26 +296,7 @@
             }
         }
 
-        function updateMultiModelOptions() {
-        // =============================
-        // Config Collapse & Tree Injection
-        // =============================
-        function toggleConfigPanel(forceState=null) {
-            const formWrap = document.getElementById('config-form');
-            const btn = document.getElementById('config-toggle');
-            if (!formWrap || !btn) return;
-            const isOpen = formWrap.classList.contains('config-open');
-            const willOpen = forceState === null ? !isOpen : forceState;
-            formWrap.classList.toggle('config-open', willOpen);
-            formWrap.classList.toggle('config-collapsed', !willOpen);
-            btn.textContent = willOpen ? 'Hide' : 'Show';
-            btn.setAttribute('aria-expanded', String(willOpen));
-        }
-
-        function collapseConfigAfterStart() {
-            toggleConfigPanel(false);
-        }
-
+        // Properly scoped helper for injecting execution tree HTML (previously nested incorrectly)
         function injectExecutionTree(html, meta) {
             try {
                 const parser = new DOMParser();
@@ -341,20 +313,7 @@
             } catch(e) { console.warn('Tree inject failed', e); }
         }
 
-        // Override startMultiRun to collapse config on success
-        const originalStartMultiRun = window.startMultiRun;
-        window.startMultiRun = function(e) {
-            originalStartMultiRun(e);
-            // collapse shortly after submission (optimistic)
-            setTimeout(collapseConfigAfterStart, 400);
-            // fetch latest status partial to seed left tree if not present
-            setTimeout(() => {
-                const container = document.getElementById('execution-tree-container');
-                if (container && container.children.length === 0) {
-                    fetch('/status').then(r=>r.text()).then(html => injectExecutionTree(html, {})).catch(()=>{});
-                }
-            }, 800);
-        }
+        function updateMultiModelOptions() {
             const providerEl = document.getElementById('multi_llm_provider');
             if (!providerEl) return;
             const provider = providerEl.value;
@@ -378,6 +337,8 @@
                 deepSelect.appendChild(option);
             });
         }
+
+        function capitalizeFirstLetter(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : str; }
 
         // Position fields removed in multi-run only UI
 
@@ -801,8 +762,9 @@
         // Log Streaming UI & Handlers
         // =============================
         function ensureRunLogElements(runId) {
+            // Only attach logs if a specific run panel exists to avoid premature visualization
             const panel = document.getElementById('panel-' + runId);
-            if (!panel) return;
+            if (!panel) return; // defer until panel/content is opened
             let logWrap = panel.querySelector('.run-log-wrapper');
             if (!logWrap) {
                 logWrap = document.createElement('div');
@@ -958,25 +920,50 @@
               .catch(()=>{});
         }
 
-                function startMultiRun(ev) {
+        // Config panel collapse helpers (top-level)
+        function toggleConfigPanel(forceState=null) {
+            const formWrap = document.getElementById('config-form');
+            if (!formWrap) return;
+            const isOpen = formWrap.classList.contains('config-open');
+            const willOpen = forceState === null ? !isOpen : forceState;
+            formWrap.classList.toggle('config-open', willOpen);
+            formWrap.classList.toggle('config-collapsed', !willOpen);
+        }
+        function collapseConfigAfterStart() { toggleConfigPanel(false); }
+
+        function startMultiRun(ev) {
             ev.preventDefault();
             const form = ev.target;
             const fd = new FormData(form);
             ensureMultiRunVisible();
-            // Kick off aggregate websocket if not connected yet
             if (!wsConnected) connectWebSocket();
+            // Optimistic collapse immediately
+            collapseConfigAfterStart();
             fetch('/start-multi', {method:'POST', body: fd})
               .then(r=> r.json())
               .then(js => {
                 if (js.runs) {
                     js.runs.forEach(r => ensureRunTab(r.run_id, r.ticker, 'in_progress'));
-                    // Activate first run automatically
                     if (js.runs.length) activateRun(js.runs[0].run_id);
                 } else if (js.error) {
                     alert('Error: ' + js.error);
+                    // Re-open config on error
+                    toggleConfigPanel(true);
                 }
+                // Seed execution tree if empty
+                setTimeout(() => {
+                    const container = document.getElementById('execution-tree-container');
+                    if (container && container.children.length === 0) {
+                        fetch('/status').then(r=>r.text()).then(html => {
+                            try { injectExecutionTree(html, {}); } catch(e) {}
+                        }).catch(()=>{});
+                    }
+                }, 400);
               })
-              .catch(err => console.error('multi-run start failed', err));
+              .catch(err => {
+                console.error('multi-run start failed', err);
+                toggleConfigPanel(true);
+              });
         }
                 // Selection & Content Fetch
                 function selectNode(ev, itemId, runId=null) {
@@ -1005,7 +992,7 @@
                                 }
                             }
                         }
-                        panel.innerHTML = `<div class="right-panel-inner"><div class="content-header"><h3>${itemId.replace(/_(messages|report)$/,'')} ${itemId.endsWith('_messages')?'Messages':'Report'}</h3></div><div class="content-body">${cached ? cached : '<em>Streaming...</em>'}</div></div>`;
+                        panel.innerHTML = `<div class="right-panel-inner"><div class="content-header"><h3>${itemId.replace(/_(messages|report)$/,'').split('_').map(capitalizeFirstLetter).join(' ')} ${itemId.endsWith('_messages')?'Messages':'Report'}</h3></div><div class="content-body">${cached ? cached : '<em>Streaming...</em>'}</div></div>`;
                             if (!cached) {
                                 // In case patches arrive after selection
                                 setTimeout(()=>{ applyContentOverride(runId, itemId); }, 50);
@@ -1039,8 +1026,58 @@
                     }
                 }
                 // Log Filter Modal
-                function openLogFilterModal() { const dlg = document.getElementById('log-filter-modal'); if (dlg) dlg.showModal(); }
-                function applyLogFilters(e) { e.preventDefault(); const dlg = document.getElementById('log-filter-modal'); if (dlg) dlg.close(); /* propagate filters to each run reloadLogs later */ }
+                function openLogFilterModal() {
+                    const dlg = document.getElementById('log-filter-modal');
+                    if (!dlg) return;
+                    // Prefill modal with active run's current filters (fallback to first run)
+                    const activeTab = document.querySelector('.instrument-tab.active') || document.querySelector('.instrument-tab');
+                    if (activeTab) {
+                        const runId = activeTab.dataset.runId;
+                        const sevSel = document.querySelector(`select[data-log-sev='${runId}']`);
+                        const srcSel = document.querySelector(`select[data-log-src='${runId}']`);
+                        const qInput = document.querySelector(`input[data-log-q='${runId}']`);
+                        if (sevSel) {
+                            const gSev = document.getElementById('global-log-severity');
+                            if (gSev) gSev.value = sevSel.value;
+                        }
+                        if (srcSel) {
+                            const gSrc = document.getElementById('global-log-sources');
+                            if (gSrc) {
+                                const selected = Array.from(srcSel.selectedOptions).map(o=>o.value);
+                                Array.from(gSrc.options).forEach(opt => { opt.selected = selected.includes(opt.value); });
+                            }
+                        }
+                        if (qInput) {
+                            const gQ = document.getElementById('global-log-query');
+                            if (gQ) gQ.value = qInput.value;
+                        }
+                    }
+                    dlg.showModal();
+                }
+                function applyLogFilters(e) {
+                    e.preventDefault();
+                    const dlg = document.getElementById('log-filter-modal');
+                    const sev = document.getElementById('global-log-severity')?.value || 'INFO';
+                    const srcSel = document.getElementById('global-log-sources');
+                    const sources = srcSel ? Array.from(srcSel.selectedOptions).map(o=>o.value) : [];
+                    const query = (document.getElementById('global-log-query')?.value || '').trim();
+                    // For each known run tab, ensure log elements exist, push filters, reload
+                    document.querySelectorAll('.instrument-tab').forEach(tab => {
+                        const runId = tab.dataset.runId;
+                        if (!runId) return;
+                        ensureRunLogElements(runId);
+                        const sevSel = document.querySelector(`select[data-log-sev='${runId}']`);
+                        if (sevSel) sevSel.value = sev;
+                        const perSrcSel = document.querySelector(`select[data-log-src='${runId}']`);
+                        if (perSrcSel) {
+                            Array.from(perSrcSel.options).forEach(opt => { opt.selected = sources.includes(opt.value); });
+                        }
+                        const qInput = document.querySelector(`input[data-log-q='${runId}']`);
+                        if (qInput) qInput.value = query;
+                        reloadLogs(runId, true);
+                    });
+                    if (dlg) dlg.close();
+                }
 
         // Handle when new content is loaded (like when starting a process)
         document.addEventListener('htmx:afterSettle', function(event) {
