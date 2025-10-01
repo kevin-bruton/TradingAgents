@@ -429,7 +429,7 @@ Snapshot (gap recovery):
 
 REST API for filtering & search:
 ```
-GET /runs/{run_id}/logs?severity=INFO&sources=agent,system&q=warn&after_seq=20&limit=200
+GET /runs/{run_id}/logs?severity=INFO&sources=agent,decision,llm,tool,system&q=warn&after_seq=20&limit=200
 ```
 Parameters:
 - `severity=` single threshold (INFO / DEBUG / WARN / ERROR) or comma list (e.g. `DEBUG,ERROR`).
@@ -646,3 +646,34 @@ Please reference our work if you find *TradingAgents* provides you with some hel
       url={https://arxiv.org/abs/2412.20138}, 
 }
 ```
+
+## Embedding Model Initialization (Meta Tensor Error Mitigation)
+
+If you run multi-instrument (multi-run) executions concurrently, PyTorch inside
+`sentence-transformers` could previously raise:
+
+```
+RuntimeError: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to()
+```
+
+This typically occurs when several threads try to construct the same model at
+once, triggering a race while weights are still on a temporary/meta device.
+
+To mitigate this, the code now uses a process-wide singleton loader with a
+thread lock (`_load_embedding_model` in `tradingagents/agents/utils/memory.py`).
+It:
+- Performs double-checked locking
+- Retries once on a meta tensor error
+- Falls back gracefully to ChromaDB default embeddings if initialization fails
+
+You can override the device used for the embedding model by setting:
+
+```
+export SENTENCE_TRANSFORMERS_DEVICE=cuda
+```
+
+(Defaults to `cpu` for stability.)
+
+If you still encounter issues, ensure you have an up-to-date `torch` and
+`sentence-transformers` install, or temporarily disable local embeddings via
+config: `{ "use_local_embeddings": false }` to rely on provider/API embeddings.

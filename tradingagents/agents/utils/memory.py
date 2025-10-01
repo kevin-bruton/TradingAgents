@@ -1,5 +1,66 @@
 import chromadb
 import os
+import threading
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Global embedding model singleton (thread-safe) to avoid concurrent model
+# instantiation causing PyTorch meta tensor errors when multiple runs start
+# simultaneously (e.g. multi-instrument webapp runs).
+# ---------------------------------------------------------------------------
+_EMBEDDING_MODEL_SINGLETON = None  # type: ignore
+_EMBEDDING_MODEL_NAME: Optional[str] = None
+_EMBEDDING_MODEL_LOCK = threading.Lock()
+
+def _load_embedding_model(model_name: str = "all-MiniLM-L6-v2"):
+    """Idempotently load and return a shared SentenceTransformer model.
+
+    This guards against the race where multiple threads/processes try to
+    construct the model at once, which can surface as:
+        RuntimeError: Cannot copy out of meta tensor; no data!
+
+    Strategy:
+      1. Double-checked locking around a global singleton.
+      2. Catch meta-tensor related RuntimeError and retry once serially.
+      3. On persistent failure, return None so caller can fall back to
+         ChromaDB default embeddings (keeping the app functional).
+    """
+    global _EMBEDDING_MODEL_SINGLETON, _EMBEDDING_MODEL_NAME
+    if _EMBEDDING_MODEL_SINGLETON is not None:
+        return _EMBEDDING_MODEL_SINGLETON
+
+    with _EMBEDDING_MODEL_LOCK:
+        if _EMBEDDING_MODEL_SINGLETON is not None:  # re-check
+            return _EMBEDDING_MODEL_SINGLETON
+        try:
+            from sentence_transformers import SentenceTransformer  # local import
+            try:
+                # Force CPU unless user explicitly overrides via env; reduces
+                # cross-device moves that can trigger meta tensor pathways.
+                device = os.getenv("SENTENCE_TRANSFORMERS_DEVICE", "cpu")
+                _EMBEDDING_MODEL_SINGLETON = SentenceTransformer(model_name, device=device)
+                _EMBEDDING_MODEL_NAME = model_name
+                return _EMBEDDING_MODEL_SINGLETON
+            except RuntimeError as re:  # Handle meta tensor race
+                if "meta tensor" in str(re).lower():
+                    # Retry once after a short synchronized backoff
+                    # (No sleep used here to keep deterministic; could add if needed.)
+                    try:
+                        _EMBEDDING_MODEL_SINGLETON = SentenceTransformer(model_name, device="cpu")
+                        _EMBEDDING_MODEL_NAME = model_name
+                        return _EMBEDDING_MODEL_SINGLETON
+                    except Exception as re2:  # pragma: no cover - rare double failure
+                        print(f"⚠️  Embedding model meta tensor retry failed: {re2}. Falling back to ChromaDB default embeddings.")
+                        _EMBEDDING_MODEL_SINGLETON = None
+                        return None
+                else:
+                    raise
+        except ImportError:
+            # sentence-transformers not installed; caller will fallback.
+            return None
+
+def _get_shared_embedding_model():  # convenience accessor
+    return _EMBEDDING_MODEL_SINGLETON
 
 class FinancialSituationMemory:
     def __init__(self, name, config, persist_directory="./memory_store"):
@@ -7,17 +68,17 @@ class FinancialSituationMemory:
         self.use_local_embeddings = config.get("use_local_embeddings", True)
         
         if self.use_local_embeddings:
-            try:
-                from sentence_transformers import SentenceTransformer
-                # Use a good general-purpose model for financial text
-                self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            # Attempt to obtain (or lazily create) the shared embedding model
+            self.embedding_model = _load_embedding_model('all-MiniLM-L6-v2')
+            if self.embedding_model is not None:
                 self.embedding_type = "local"
-                print(f" Using local embeddings with sentence-transformers for {name}") # ✅
-            except ImportError:
-                print("⚠️  sentence-transformers not found. Install with: pip install sentence-transformers")
-                print("Falling back to ChromaDB's default embeddings...")
-                self.embedding_model = None
+                # Only print once per process for clarity
+                if _EMBEDDING_MODEL_NAME and name == "bull_memory":
+                    print(f" Using shared local embeddings model '{_EMBEDDING_MODEL_NAME}' (singleton) for memory instances")
+            else:
+                print("⚠️  sentence-transformers unavailable or failed to initialize safely. Falling back to ChromaDB's default embeddings...")
                 self.embedding_type = "chromadb_default"
+                self.embedding_model = None
         else:
             # Centralized API-based client creation
             from tradingagents.utils.llm_client import build_openai_compatible_client
