@@ -338,6 +338,229 @@ Edge cases not retried:
 
 If you encounter a failure pattern you believe should be considered transient, you can extend `TRANSIENT_EXCEPTION_TYPES` inside `safe_llm.py`.
 
+## Multi-Instrument (Parallel) Execution
+
+TradingAgents now supports running multiple ticker analyses concurrently across both the Web API (feature flagged) and the CLI.
+
+### Enabling (Web Backend)
+Set the environment flag before launching FastAPI:
+```bash
+export ENABLE_MULTI_RUN=1
+```
+Optional tunables:
+```bash
+export MAX_PARALLEL_RUNS=5           # Upper bound on simultaneously active runs
+export MAX_TICKERS_PER_REQUEST=10    # Limit per /start-multi invocation
+export LLM_MAX_CONCURRENT=4          # Global max simultaneous outbound LLM API calls
+```
+
+### Run Identity
+Each run is assigned a `run_id`:
+```
+<TICKER>--<YYYY-MM-DD_HH.MM.SS>--<short>
+```
+Example: `AAPL--2025-09-30_14.22.05--d3a9bf`
+
+### REST Endpoints (when ENABLE_MULTI_RUN=1)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/start-multi` | POST (form) | Launch multiple runs (fields mirror `/start`) with `company_symbols` CSV |
+| `/runs` | GET | List all runs (optionally filter `?status=`) |
+| `/runs/{run_id}/status` | GET | Lightweight status snapshot |
+| `/runs/{run_id}/tree` | GET | Full execution tree JSON |
+| `/runs/{run_id}/decision` | GET | Final decision (404 until ready) |
+| `/runs/{run_id}/cancel` | POST | Cooperative cancellation |
+
+Sample `curl` (start three tickers):
+```bash
+curl -X POST http://localhost:8000/start-multi \
+  -F company_symbols=AAPL,MSFT,NVDA \
+  -F llm_provider=openai \
+  -F quick_think_llm=gpt-4o-mini \
+  -F deep_think_llm=gpt-4o \
+  -F max_debate_rounds=2 \
+  -F cost_per_trade=0.25 \
+  -F analysis_date=2025-09-30
+```
+
+List runs:
+```bash
+curl http://localhost:8000/runs
+```
+
+Cancel a run:
+```bash
+curl -X POST http://localhost:8000/runs/AAPL--2025-09-30_14.22.05--d3a9bf/cancel
+```
+
+### WebSocket Protocol (Multi-Run)
+Aggregate subscription (`/ws` with no query params) receives:
+```json
+{ "type": "init_all", "runs": [ ... ] }
+{ "type": "status_update_aggregate", "runs": { "<run_id>": {"ticker":...,"status":...,"overall_progress":...}, ... } }
+```
+
+### Structured Log Streaming (Optional Feature – Enhanced)
+
+Real-time, **structured** streaming of per-run log events with severity, source classification, and filtering.
+
+Enable:
+```bash
+export ENABLE_LOG_STREAM=1
+export LOG_BUFFER_MAX_LINES=400   # Optional (default 250)
+```
+
+Event Schema (incremental WebSocket):
+```json
+{
+  "type": "log_append_run",
+  "run_id": "...",
+  "entries": [
+    {"seq":42,"ts":1730399123.12,"iso":"2025-10-01T12:25:23","severity":"INFO","source":"agent","agent_id":"market_analyst","message":"[market_analyst] report updated -> Market Analysis Report"}
+  ],
+  "seq":42
+}
+```
+
+Snapshot (gap recovery):
+```json
+{"type":"log_snapshot_run","run_id":"...","entries":[...],"seq":42}
+```
+
+REST API for filtering & search:
+```
+GET /runs/{run_id}/logs?severity=INFO&sources=agent,system&q=warn&after_seq=20&limit=200
+```
+Parameters:
+- `severity=` single threshold (INFO / DEBUG / WARN / ERROR) or comma list (e.g. `DEBUG,ERROR`).
+- `sources=` comma list (agent, decision, llm, tool, system).
+- `q=` case-insensitive substring across message / raw.
+- `after_seq=` pagination / incremental polling.
+- `limit=` (<=500) batch size.
+
+Download full log:
+```
+GET /runs/{run_id}/logs/download
+```
+Plain text with header & formatted lines.
+
+UI Features:
+- Per-run collapsible panel with severity threshold, multi-select sources, search box, manual reload.
+- Auto-scroll only when near bottom to prevent viewing disruption.
+- Live append integrates with filters (server sends all; future optimization may add server-side filtered channels).
+
+Severity Levels:
+`TRACE < DEBUG < INFO < WARN < ERROR` (TRACE reserved for deep diagnostics; default threshold: INFO).
+
+Performance & Safety:
+- Bounded ring buffer per run (`LOG_BUFFER_MAX_LINES`).
+- Server-generated messages reduce XSS surface; content HTML-escaped client-side.
+
+Extending:
+- Use `log_run(run_id, message, severity="INFO", source="system")` internally to emit new events.
+- Consider adding provider rate-limit NOTICE/WARN lines for adaptive concurrency (future roadmap item).
+
+### Execution Tree Diff/Patch Optimization (Experimental)
+To minimize WebSocket payload size, the server emits incremental status patches:
+```json
+{"type":"status_patch_run","run_id":"...","seq":7,"changed":[{"id":"market_analyst","status":"completed","status_icon":"✅"}]}
+```
+Clients track `seq`; on gaps they request a full snapshot via `{action:"resync"}` receiving `run_snapshot`.
+
+### Granular Content Patching (Reports & Messages)
+Large, growing text nodes (agent `_messages` / `_report`) stream as append-only or full replace patches:
+```json
+{"type":"content_patch_run","run_id":"...","seq":11,"patches":[{"id":"trader_report","mode":"append","text":"New concluding paragraph..."}]}
+```
+Reduces redundant re-sending of the entire report content.
+
+### Enriched Decision Panel
+Final portfolio decision is normalized into a structured, versioned schema including summary, inferred action, heuristic risk metrics (SL/TP/R/R), confidence score, rationale bullets, and raw text. Delivered over WebSocket & `/runs/{run_id}/decision` with rendered Markdown + HTML.
+
+### Provider / Model Concurrency Tiers (Phase 1)
+Layered concurrency limiter controls outbound LLM calls:
+- Global limit via `LLM_MAX_CONCURRENCY`.
+- Per-provider and provider:model granular constraints via `LLM_PROVIDER_LIMITS` (e.g. `openai:6,anthropic:3,openai:gpt-4o:2`).
+- Metrics endpoint `/metrics/concurrency` exposes live utilization snapshot.
+
+Future additions: adaptive tuning (lower limits on burst 429s), hot-reload, UI surfacing.
+
+
+Focused subscription (`/ws?run_id=<run_id>`) receives:
+```json
+{ "type": "init_run", "run_id": "...", "execution_tree": [...], "overall_progress": 0 }
+{ "type": "status_update_run", "run_id": "...", "overall_progress": 42, "status": "in_progress" }
+```
+
+### Results Persistence Changes
+Per-run folder now uses seconds precision and writes a `RUN_ID` marker file when multi-run is enabled:
+```
+results/<TICKER>/<YYYY-MM-DD_HH.MM.SS>/
+  RUN_ID
+  message_tool.log
+  reports/*.md
+```
+
+### Cooperative Cancellation
+`/runs/{run_id}/cancel` sets a cancellation flag; execution checks between major steps and marks unfinished agents/phases as `canceled` without force-killing lower-level calls (safe checkpoints model).
+
+### CLI Multi-Ticker Mode
+Run multiple symbols concurrently without the web server:
+```bash
+python -m cli.main analyze-multi \
+  --tickers AAPL,MSFT,NVDA \
+  --parallel 3 \
+  --research_depth 2 \
+  --llm_provider openai \
+  --shallow_thinker gpt-4o-mini \
+  --deep_thinker gpt-4o
+```
+Outputs a summary table including decisions and result directories.
+
+### Web UI (Tabbed Multi-Run Interface)
+
+When `ENABLE_MULTI_RUN=1` the homepage form exposes a multi-symbol input (comma-separated). Submitting launches all requested tickers concurrently (subject to `MAX_PARALLEL_RUNS`).
+
+UI Behavior:
+- A dedicated "Multi Runs" section renders a tab for every active run. Tabs are created immediately with status = `pending` / spinner.
+- The page opens a single aggregate WebSocket first; when you click a tab, a focused WebSocket for that `run_id` is opened (and re-opened automatically on reconnect) to stream fine‑grained progress.
+- Each tab shows: ticker, current status, overall % progress bar, and live appended report sections as they complete.
+- A red Cancel button per tab issues `POST /runs/{run_id}/cancel` and the UI marks remaining phases as canceled as the backend transitions state.
+- Finished runs retain their tab; you can start additional batches without refreshing (new tabs append to the right).
+
+Practical Steps:
+1. Export `ENABLE_MULTI_RUN=1` (and optional tuning env vars) then start the server.
+2. Enter multiple symbols: e.g. `AAPL,MSFT,NVDA` and submit.
+3. Watch aggregate panel update (green = completed, red = error/canceled, amber = in progress).
+4. Click a ticker tab to drill into its execution tree & markdown reports.
+5. Use Cancel on any long-running analysis if you want to free a slot for another ticker.
+
+Resilience & Reconnect:
+- If the aggregate socket drops, the client uses exponential backoff and temporarily overlays a reconnect banner.
+- Focused tabs independently reconnect; stale data is re-hydrated from an `init_run` message.
+
+Accessibility Tips:
+- Tabs are plain buttons (no custom ARIA roles required) but you can navigate with standard keyboard focus cycling.
+- Long ticker sets: horizontal scrolling appears automatically; the active tab stays in view.
+
+Future UI Enhancements (see roadmap below) will add diff-based update payloads and richer decision detail panes.
+
+### Current Limitations / Roadmap
+- Already Implemented: tabbed multi-run UI, cooperative per-run cancellation, seconds precision results directories with `RUN_ID` marker, global LLM concurrency semaphore, REST + WebSocket integration tests, automatic pruning + results retention scheduler.
+- Retention / Pruning Configuration (env vars):
+  * `RUN_PRUNE_INTERVAL_SECONDS` (default 300) – how often the background thread runs.
+  * `RUN_MAX_AGE_HOURS` (default 24) – prune in-memory run state older than this.
+  * `RUN_RESULTS_MAX_PER_TICKER` (default 20) – keep only the N most recent result directories per ticker.
+  * `RUN_RESULTS_MAX_AGE_DAYS` (default 7) – remove result directories older than this (in days, skips active runs). Set to `0` to disable ALL result directory deletions. (Legacy `RUN_RESULTS_MAX_AGE_HOURS` still honored if set; it is converted to days.)
+- Pending / Planned:
+  * WebSocket diff/patch optimization to shrink large execution tree payloads.
+  * Rich decision panel (structured trade rationale, risk metrics, position adjustments) and hierarchical tree visualization enhancements.
+  * Optional metrics/health endpoint (active runs, semaphore utilization, average phase durations).
+  * Optional compression of completed run artifacts.
+  * UI indicators for canceled vs failed phases at finer granularity.
+
+For design rationale and deeper architectural notes see `multi_instrument_execution_plan.md`.
+
 
 ## TradingAgents Package
 

@@ -16,62 +16,56 @@
         <span id="overall-progress-text">0%</span>
     </div>
     <div id="main-content">
-        <div id="left-panel">
-            <h2>Configuration</h2>
-            <div id="config-form">
-                <form hx-post="/start" hx-target="#left-panel" hx-swap="innerHTML" hx-indicator="#loading">
-                    <label for="company_symbol">Company Symbol:</label>
-                    <input type="text" id="company_symbol" name="company_symbol" value="AAPL" required>
-                    
-                    <label for="llm_provider">LLM Provider:</label>
-                    <select id="llm_provider" name="llm_provider" onchange="updateModelOptions()" required></select>
-                    
-                    <label for="quick_think_llm">Quick Think LLM:</label>
-                    <select id="quick_think_llm" name="quick_think_llm" required></select>
-                    
-                    <label for="deep_think_llm">Deep Think LLM:</label>
-                    <select id="deep_think_llm" name="deep_think_llm" required></select>
-                    
-                    <label for="max_debate_rounds">Max Debate Rounds:</label>
-                    <select id="max_debate_rounds" name="max_debate_rounds" required>
-                        <option value="1" selected>1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                    
-                    <label for="cost_per_trade">Cost Per Trade ($):</label>
-                    <input type="number" id="cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
-                    
-                    <label for="analysis_date">Analysis Date:</label>
-                    <input type="date" id="analysis_date" name="analysis_date" value="{{ default_date }}" required>
-
-                    <fieldset style="margin-top:1rem; border:1px solid #444; padding:0.75rem;">
-                        <legend>Current Position (Optional)</legend>
-                        <label for="position_status">Position Status:</label>
-                        <select id="position_status" name="position_status" onchange="togglePositionFields()">
-                            <option value="none" selected>No Open Position</option>
-                            <option value="long">Long Position</option>
-                            <option value="short">Short Position</option>
-                        </select>
-                        <div id="position-details" style="display:none; margin-top:0.5rem;">
-                            <label for="current_stop_loss">Existing Stop Loss:</label>
-                            <input type="number" step="0.01" min="0" id="current_stop_loss" name="current_stop_loss" placeholder="e.g. 150.25">
-                            <label for="current_take_profit">Existing Take Profit:</label>
-                            <input type="number" step="0.01" min="0" id="current_take_profit" name="current_take_profit" placeholder="e.g. 180.00">
-                            <small>If left blank, no current levels will be assumed. New levels may be suggested.</small>
+        <div id="left-panel" class="layout-left">
+            <div id="config-header" class="config-header">
+                <h2 style="display:inline-block; margin:0;">Configuration</h2>
+                <button id="config-toggle" type="button" class="config-toggle-btn" aria-expanded="true" aria-controls="config-form" onclick="toggleConfigPanel()">Hide</button>
+            </div>
+            <div id="metrics-panel" style="margin-bottom:1rem; border:1px solid var(--border-color); padding:0.5rem; font-size:0.85rem; display:none;">
+                <strong>Run Metrics</strong>
+                <div id="metrics-body"><em>Loading metrics...</em></div>
+            </div>
+            <div id="config-form" class="config-open">
+                <h3 style="margin-top:0;">Multi-Run Configuration</h3>
+                <form id="multi-run-form" onsubmit="startMultiRun(event)">
+                    <label for="multi_company_symbols">Company Symbols (CSV):</label>
+                    <input type="text" id="multi_company_symbols" name="company_symbols" placeholder="AAPL,MSFT,NVDA" value="AAPL,MSFT" required>
+                    <div class="two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div>
+                            <label for="multi_llm_provider">LLM Provider:</label>
+                            <select id="multi_llm_provider" name="llm_provider" onchange="updateMultiModelOptions()"></select>
                         </div>
-                    </fieldset>
-                    
-                    <button type="submit">Start Process</button>
-                    <div id="loading" class="htmx-indicator">Starting process...</div>
+                        <div>
+                            <label for="multi_max_debate_rounds">Max Debate Rounds:</label>
+                            <select id="multi_max_debate_rounds" name="max_debate_rounds">
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label for="multi_quick_think_llm">Quick Think LLM:</label>
+                    <select id="multi_quick_think_llm" name="quick_think_llm"></select>
+                    <label for="multi_deep_think_llm">Deep Think LLM:</label>
+                    <select id="multi_deep_think_llm" name="deep_think_llm"></select>
+                    <label for="multi_cost_per_trade">Cost Per Trade ($):</label>
+                    <input type="number" id="multi_cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
+                    <label for="multi_analysis_date">Analysis Date:</label>
+                    <input type="date" id="multi_analysis_date" name="analysis_date" required>
+                    <button type="submit">Start Multi-Run</button>
+                    <small style="display:block;margin-top:6px;color:var(--text-secondary);">Requires ENABLE_MULTI_RUN=1 on server.</small>
                 </form>
             </div>
+            <div id="execution-tree-container"></div>
         </div>
         <div id="right-panel">
-            <p>Welcome! Please set your configuration and start the process.</p>
-            <p>Enter a company symbol (e.g., AAPL, MSFT, GOOGL) and click "Start Process" to begin the trading analysis.</p>
+            <div id="multi-run-ui" style="display:none; height:100%; display:flex; flex-direction:column;">
+                <div id="run-tabs" class="run-tabs" role="tablist" aria-label="Active Runs"></div>
+                <div id="run-panels" class="run-panels" style="flex:1; overflow:auto; position:relative;"></div>
+            </div>
+            <div id="single-run-placeholder">
+                <p>Start a multi-run to view progress here.</p>
+            </div>
         </div>
     </div>
     
@@ -85,14 +79,19 @@
         let reconnectAttempts = 0;
         const maxReconnectDelay = 15000;
 
-        function websocketUrl() {
+        function websocketUrl(runId=null, opts={}) {
             const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            return proto + '://' + window.location.host + '/ws';
+            const base = proto + '://' + window.location.host + '/ws';
+            const params = [];
+            if (runId) params.push('run_id=' + encodeURIComponent(runId));
+            if (opts.patch) params.push('patch=1');
+            if (params.length) return base + '?' + params.join('&');
+            return base;
         }
 
-        function connectWebSocket() {
+        function connectWebSocket(runId=null, onMessageCb=null, options={}) {
             try {
-                ws = new WebSocket(websocketUrl());
+                ws = new WebSocket(websocketUrl(runId, options));
             } catch (e) {
                 console.warn('[ws] construction failed', e);
                 enablePollingFallback();
@@ -121,32 +120,72 @@
             ws.addEventListener('message', (event) => {
                 let data;
                 try { data = JSON.parse(event.data); } catch { return; }
+                if (onMessageCb) { onMessageCb(data); }
                 if (data.type === 'init') {
-                    // Replace left panel execution tree HTML from snapshot
-                    if (data.execution_tree_html) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(data.execution_tree_html, 'text/html');
-                        const newTree = doc.querySelector('#execution-tree')?.parentElement; // container has other elems
-                        if (newTree) {
-                            // We only want the execution tree + progress bar content from the snapshot
-                            const leftPanel = document.getElementById('left-panel');
-                            if (leftPanel) {
-                                // Preserve configuration form while updating status section
-                                // So we extract only the <ul class="execution-tree"> element and progress bars
-                                const existingTree = leftPanel.querySelector('.execution-tree');
-                                const incomingTree = doc.querySelector('.execution-tree');
-                                if (existingTree && incomingTree) {
-                                    existingTree.replaceWith(incomingTree);
-                                } else if (!existingTree && incomingTree) {
-                                    leftPanel.appendChild(incomingTree);
-                                }
-                                // Progress elements out-of-band updates - just set directly
-                                if (typeof data.overall_progress === 'number') updateOverallProgress(data.overall_progress, data.overall_status);
-                            }
-                        }
-                    }
+                    if (data.execution_tree_html) injectExecutionTree(data.execution_tree_html, data);
                 } else if (data.type === 'status_update') {
                     applyStatusUpdate(data);
+                } else if (data.type === 'init_all') {
+                    // Aggregate init for multi-run: populate any existing runs into tabs
+                    ensureMultiRunVisible();
+                    // If execution tree not yet injected (empty container), attempt injection from payload if provided
+                    if (data.execution_tree_html) {
+                        injectExecutionTree(data.execution_tree_html, data);
+                    } else {
+                        const container = document.getElementById('execution-tree-container');
+                        if (container && container.children.length === 0) {
+                            // fallback fetch of status partial
+                            fetch('/status').then(r=>r.text()).then(html => injectExecutionTree(html, {})).catch(()=>{});
+                        }
+                    }
+                    if (Array.isArray(data.runs)) {
+                        data.runs.forEach(r => ensureRunTab(r.run_id, r.ticker, r.status));
+                    }
+                } else if (data.type === 'status_update_aggregate') {
+                    if (data.runs) {
+                        Object.entries(data.runs).forEach(([rid, rinfo]) => {
+                            updateRunTab(rid, rinfo.status, rinfo.overall_progress);
+                        });
+                    }
+                } else if (data.type === 'init_run') {
+                    // Focused snapshot load into panel (with optional patch negotiation)
+                    loadRunPanel(data.run_id, data);
+                    if (data.patches) {
+                        if (!window.runPatchState) window.runPatchState = {};
+                        window.runPatchState[data.run_id] = { seq: data.seq || 0 };
+                        console.debug('[patch] enabled for run', data.run_id, 'seq=0');
+                    }
+                    if (data.log_stream) {
+                        ensureRunLogElements(data.run_id);
+                        if (!window.runLogState) window.runLogState = {};
+                        window.runLogState[data.run_id] = { seq: 0, syncing: false };
+                        try { ws.send(JSON.stringify({action:'log_dump', run_id: data.run_id})); } catch {}
+                    }
+                } else if (data.type === 'status_patch_run') {
+                    applyRunPatch(data);
+                } else if (data.type === 'status_update_run') {
+                    updateRunTab(data.run_id, data.status, data.overall_progress);
+                    // Optionally update panel progress if open
+                    const p = document.querySelector(`#panel-${CSS.escape(data.run_id)} .run-progress-inner`);
+                    if (p && typeof data.overall_progress === 'number') {
+                        p.style.width = data.overall_progress + '%';
+                    }
+                    if (data.decision_html) {
+                        const dec = document.getElementById(`decision-${data.run_id}`);
+                        if (dec) {
+                            dec.innerHTML = data.decision_html;
+                        }
+                    }
+                } else if (data.type === 'run_snapshot') {
+                    // Full snapshot after resync. Rebuild panel & reset patch tracking sequence.
+                    loadRunPanel(data.run_id, data);
+                    if (!window.runPatchState) window.runPatchState = {};
+                    window.runPatchState[data.run_id] = { seq: data.seq || 0 };
+                    console.debug('[patch] resync complete for run', data.run_id, 'seq=', data.seq);
+                } else if (data.type === 'log_append_run') {
+                    handleRunLogAppend(data);
+                } else if (data.type === 'log_snapshot_run') {
+                    handleRunLogSnapshot(data);
                 } else if (data.type === 'content') {
                     // Content panel update
                     const right = document.getElementById('right-panel');
@@ -211,7 +250,7 @@
                 const resp = await fetch('/config/providers');
                 const data = await resp.json();
                 const providers = data.providers || [];
-                const providerSelect = document.getElementById('llm_provider');
+                const providerSelect = document.getElementById('multi_llm_provider');
                 providerSelect.innerHTML = '';
                 providers.forEach(p => {
                     providerDisplayNames[p.key] = p.display_name || p.key;
@@ -219,34 +258,80 @@
                     const opt = document.createElement('option');
                     opt.value = p.key;
                     opt.textContent = p.display_name || p.key;
-                    if (p.key === 'openrouter') opt.selected = true; // keep previous default
+                    if (p.key === 'openrouter') opt.selected = true;
                     providerSelect.appendChild(opt);
                 });
-                updateModelOptions();
+                updateMultiModelOptions();
             } catch (e) {
                 console.error('Failed to load provider configuration', e);
             }
         }
 
-        function updateModelOptions() {
-            const provider = document.getElementById('llm_provider').value;
-            const quickSelect = document.getElementById('quick_think_llm');
-            const deepSelect = document.getElementById('deep_think_llm');
-            
-            // Clear existing options
+        function updateMultiModelOptions() {
+        // =============================
+        // Config Collapse & Tree Injection
+        // =============================
+        function toggleConfigPanel(forceState=null) {
+            const formWrap = document.getElementById('config-form');
+            const btn = document.getElementById('config-toggle');
+            if (!formWrap || !btn) return;
+            const isOpen = formWrap.classList.contains('config-open');
+            const willOpen = forceState === null ? !isOpen : forceState;
+            formWrap.classList.toggle('config-open', willOpen);
+            formWrap.classList.toggle('config-collapsed', !willOpen);
+            btn.textContent = willOpen ? 'Hide' : 'Show';
+            btn.setAttribute('aria-expanded', String(willOpen));
+        }
+
+        function collapseConfigAfterStart() {
+            toggleConfigPanel(false);
+        }
+
+        function injectExecutionTree(html, meta) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const treeEl = doc.querySelector('.execution-tree');
+                const container = document.getElementById('execution-tree-container');
+                if (treeEl && container) {
+                    container.innerHTML = '';
+                    container.appendChild(treeEl);
+                }
+                if (meta && typeof meta.overall_progress === 'number') {
+                    updateOverallProgress(meta.overall_progress, meta.overall_status);
+                }
+            } catch(e) { console.warn('Tree inject failed', e); }
+        }
+
+        // Override startMultiRun to collapse config on success
+        const originalStartMultiRun = window.startMultiRun;
+        window.startMultiRun = function(e) {
+            originalStartMultiRun(e);
+            // collapse shortly after submission (optimistic)
+            setTimeout(collapseConfigAfterStart, 400);
+            // fetch latest status partial to seed left tree if not present
+            setTimeout(() => {
+                const container = document.getElementById('execution-tree-container');
+                if (container && container.children.length === 0) {
+                    fetch('/status').then(r=>r.text()).then(html => injectExecutionTree(html, {})).catch(()=>{});
+                }
+            }, 800);
+        }
+            const providerEl = document.getElementById('multi_llm_provider');
+            if (!providerEl) return;
+            const provider = providerEl.value;
+            const quickSelect = document.getElementById('multi_quick_think_llm');
+            const deepSelect = document.getElementById('multi_deep_think_llm');
+            if (!quickSelect || !deepSelect) return;
             quickSelect.innerHTML = '';
             deepSelect.innerHTML = '';
-            
-            // Populate quick think options
             const quickList = (modelOptions[provider] && modelOptions[provider].quick) || [];
             quickList.forEach(m => {
                 const option = document.createElement('option');
-                option.value = m.id || m.value || m; // support both shapes
+                option.value = m.id || m.value || m;
                 option.textContent = m.name || m.text || option.value;
                 quickSelect.appendChild(option);
             });
-            
-            // Populate deep think options
             const deepList = (modelOptions[provider] && modelOptions[provider].deep) || [];
             deepList.forEach(m => {
                 const option = document.createElement('option');
@@ -256,17 +341,7 @@
             });
         }
 
-        function togglePositionFields() {
-            const status = document.getElementById('position_status').value;
-            const details = document.getElementById('position-details');
-            if (status === 'long' || status === 'short') {
-                details.style.display = 'block';
-            } else {
-                details.style.display = 'none';
-                document.getElementById('current_stop_loss').value = '';
-                document.getElementById('current_take_profit').value = '';
-            }
-        }
+        // Position fields removed in multi-run only UI
 
         // Set current date as default for analysis_date
         function setCurrentDate() {
@@ -411,14 +486,435 @@
 
         // Initialize the page
         document.addEventListener('DOMContentLoaded', function() {
-            setCurrentDate();
-            updateModelOptions(); // Set initial model options for OpenRouter
-            
-            // Try to establish websocket connection
-            connectWebSocket();
-            // Start polling only if websocket not yet connected after short delay
-            setTimeout(() => { if (!wsConnected) startTargetedUpdates(); }, 1200);
+            // Set today's date as default for multi-run if empty
+            try {
+                const today = new Date();
+                const iso = today.toISOString().split('T')[0];
+                const multiDate = document.getElementById('multi_analysis_date');
+                if (multiDate && !multiDate.value) multiDate.value = iso;
+            } catch(e) { console.warn('Date init failed', e); }
+            // Load provider config then establish websocket
+            fetchProviderConfig().finally(() => {
+                connectWebSocket();
+                setTimeout(() => { if (!wsConnected) startTargetedUpdates(); }, 1200);
+                setTimeout(startMetricsPolling, 1500);
+            });
         });
+
+                // =============================
+                // Metrics Panel Logic
+                // =============================
+                function renderMetrics(data) {
+                        const panel = document.getElementById('metrics-panel');
+                        const body = document.getElementById('metrics-body');
+                        if (!panel || !body) return;
+                        panel.style.display = 'block';
+                        if (!data || !data.counts) {
+                                body.innerHTML = '<em>No metrics available</em>';
+                                return;
+                        }
+                        const c = data.counts;
+                        const avgTotal = data.avg_total_duration_sec != null ? data.avg_total_duration_sec.toFixed(1) + 's' : '—';
+                        const phases = data.avg_phase_durations_sec || {};
+                        const phaseLines = Object.entries(phases).map(([k,v]) => `<span>${k.replace(/_/g,' ')}: ${v!=null? v.toFixed(1)+'s':'—'}</span>`).join('<br>');
+                        body.innerHTML = `
+                                <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                                    <span>Active: <strong>${c.active}</strong></span>
+                                    <span>Completed: <strong>${c.completed}</strong></span>
+                                    <span>Error: <strong>${c.error}</strong></span>
+                                    <span>Canceled: <strong>${c.canceled}</strong></span>
+                                    <span>Total: <strong>${c.total}</strong></span>
+                                    <span>Avg Total: <strong>${avgTotal}</strong></span>
+                                </div>
+                                <div style="margin-top:4px;">
+                                    <details>
+                                        <summary style="cursor:pointer;">Phase Averages</summary>
+                                        <div style="margin-top:4px; font-size:0.75rem; line-height:1.2;">${phaseLines||'<em>No data yet</em>'}</div>
+                                    </details>
+                                </div>`;
+                }
+
+                function fetchMetricsOnce() {
+                        fetch('/metrics/runs')
+                            .then(r => r.json())
+                            .then(renderMetrics)
+                            .catch(()=>{});
+                }
+
+                function startMetricsPolling() {
+                        if (window.metricsInterval) return;
+                        fetchMetricsOnce();
+                        window.metricsInterval = setInterval(fetchMetricsOnce, 5000);
+                }
+        /* =============================
+           Multi-Run UI Helpers
+        ============================= */
+        // Removed syncMultiModelOptions (single-run mode deprecated)
+
+        function ensureMultiRunVisible() {
+            const ui = document.getElementById('multi-run-ui');
+            const placeholder = document.getElementById('single-run-placeholder');
+            if (ui && placeholder) {
+                ui.style.display = 'flex';
+                placeholder.style.display = 'none';
+            }
+        }
+
+        function ensureRunTab(runId, ticker, status) {
+            let tab = document.getElementById('tab-' + runId);
+            if (!tab) {
+                const tabs = document.getElementById('run-tabs');
+                tab = document.createElement('button');
+                tab.id = 'tab-' + runId;
+                tab.className = 'run-tab';
+                tab.setAttribute('role','tab');
+                tab.setAttribute('data-run-id', runId);
+                tab.textContent = ticker + ' (' + status + ')';
+                tab.addEventListener('click', () => activateRun(runId));
+                tabs.appendChild(tab);
+                // Panel shell
+                const panels = document.getElementById('run-panels');
+                const panel = document.createElement('div');
+                panel.id = 'panel-' + runId;
+                panel.className = 'run-panel';
+                panel.innerHTML = `<div class="run-panel-header"><h3>${ticker} <small style="font-weight:normal;opacity:0.6;">${runId}</small></h3><div class="run-progress"><div class="run-progress-inner" style="width:0%"></div></div><button class="cancel-btn" onclick="cancelRun('${runId}')">Cancel</button></div><div class="run-exec-tree" id="exec-${runId}"><em>Initializing...</em></div><div class="run-decision" id="decision-${runId}"></div>`;
+                panels.appendChild(panel);
+            }
+            updateRunTab(runId, status);
+        }
+
+        function updateRunTab(runId, status, progress=null) {
+            const tab = document.getElementById('tab-' + runId);
+            if (tab) {
+                const current = tab.textContent;
+                tab.textContent = current.replace(/\([^)]*\)$/,'(' + status + ')');
+                tab.dataset.status = status;
+            }
+            if (progress != null) {
+                const prog = document.querySelector(`#panel-${CSS.escape(runId)} .run-progress-inner`);
+                if (prog) prog.style.width = progress + '%';
+            }
+        }
+
+        function activateRun(runId) {
+            ensureMultiRunVisible();
+            // Mark tabs
+            document.querySelectorAll('.run-tab').forEach(t=> t.classList.toggle('active', t.dataset.runId === runId));
+            // Panels
+            document.querySelectorAll('.run-panel').forEach(p=> p.style.display = (p.id === 'panel-' + runId) ? 'block' : 'none');
+            // If panel empty or still placeholder, open focused websocket for richer updates
+            if (!document.getElementById('panel-' + runId).dataset.focused) {
+                // Focused connection (new socket just for this run)
+                connectWebSocket(runId, (msg) => {
+                    if (msg.type === 'init_run') loadRunPanel(runId, msg);
+                    else if (msg.type === 'status_update_run') updateRunTab(runId, msg.status, msg.overall_progress);
+                    else if (msg.type === 'status_patch_run') applyRunPatch(msg);
+                    else if (msg.type === 'content_patch_run') applyContentPatches(msg);
+                    else if (msg.type === 'log_append_run') handleRunLogAppend(msg);
+                    else if (msg.type === 'log_snapshot_run') handleRunLogSnapshot(msg);
+                }, {patch: true});
+                document.getElementById('panel-' + runId).dataset.focused = '1';
+            }
+        }
+
+        function loadRunPanel(runId, snapshot) {
+            const panel = document.getElementById('panel-' + runId);
+            if (!panel) return;
+            const treeContainer = panel.querySelector('.run-exec-tree');
+            if (treeContainer && snapshot.execution_tree) {
+                treeContainer.textContent = '';
+                // Hierarchical render with IDs for patch targeting
+                const ul = document.createElement('ul');
+                ul.className = 'exec-tree-flat';
+                snapshot.execution_tree.forEach(phase => {
+                    const phaseLi = document.createElement('li');
+                    phaseLi.id = `run-${runId}-node-${phase.id}`;
+                    phaseLi.className = 'phase-node status-' + phase.status;
+                    phaseLi.innerHTML = `<div class="phase-header"><strong>${phase.name}</strong></div>`;
+                    const agentsUl = document.createElement('ul');
+                    agentsUl.className = 'agents';
+                    (phase.children||[]).forEach(agent => {
+                        const agentLi = document.createElement('li');
+                        agentLi.id = `run-${runId}-node-${agent.id}`;
+                        agentLi.className = 'agent-node status-' + agent.status;
+                        agentLi.innerHTML = `<span class="status-icon">${statusIconFor(agent.status)}</span> ${agent.name}`;
+                        agentsUl.appendChild(agentLi);
+                        // children (messages/report) not rendered here for brevity
+                    });
+                    phaseLi.appendChild(agentsUl);
+                    ul.appendChild(phaseLi);
+                });
+                treeContainer.appendChild(ul);
+            }
+            if (snapshot.log_stream) {
+                ensureRunLogElements(runId);
+            }
+        }
+
+        function statusIconFor(status) {
+            if (status === 'completed') return '✅';
+            if (status === 'in_progress') return '⏳';
+            if (status === 'error') return '❌';
+            return '⏸️';
+        }
+
+        function applyRunPatch(patchMsg) {
+            const { run_id, seq, changed } = patchMsg;
+        // ---------------- Content Patch Handling ----------------
+        if (!window.runContentState) window.runContentState = {}; // run_id -> { seq, nodes: {id: fullContent} }
+
+        function applyContentPatches(msg) {
+            const { run_id, seq, patches } = msg;
+            if (!window.runContentState[run_id]) {
+                window.runContentState[run_id] = { seq: 0, nodes: {} };
+            }
+            const state = window.runContentState[run_id];
+            if (seq <= state.seq) return; // stale
+            if (seq !== state.seq + 1) {
+                console.warn('[content-patch] sequence gap, requesting resync', run_id);
+                try { ws && ws.send(JSON.stringify({action: 'resync', run_id})); } catch {}
+                return;
+            }
+            patches.forEach(p => {
+                const existing = state.nodes[p.id] || '';
+                if (p.mode === 'append') {
+                    state.nodes[p.id] = existing + (p.text || '');
+                } else if (p.mode === 'replace') {
+                    state.nodes[p.id] = p.content || '';
+                }
+                // If this node is currently displayed in right panel, update it
+                const contentPanel = document.getElementById('right-panel');
+                if (contentPanel && contentPanel.dataset.currentItemId === p.id) {
+                    contentPanel.querySelector('.content-body').textContent = state.nodes[p.id];
+                }
+            });
+            state.seq = seq;
+        }
+            if (!window.runPatchState || !window.runPatchState[run_id]) {
+                console.debug('[patch] ignoring patch for untracked run', run_id);
+                return;
+            }
+            const state = window.runPatchState[run_id];
+            if (state.syncing) {
+                // Ignore incremental patches while awaiting a full resync snapshot
+                return;
+            }
+            if (seq <= state.seq) {
+                // Stale or duplicate
+                return;
+            }
+            if (seq !== state.seq + 1) {
+                console.warn('[patch] sequence gap detected run', run_id, 'expected', state.seq + 1, 'got', seq, '-> requesting resync');
+                state.syncing = true;
+                try {
+                    ws && ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({action: 'resync', run_id}));
+                } catch (e) {
+                    console.warn('[patch] resync request failed', e);
+                }
+                return;
+            }
+            changed.forEach(node => {
+                const el = document.getElementById(`run-${run_id}-node-${node.id}`);
+                if (el) {
+                    // Update status classes
+                    el.classList.remove('status-pending','status-in_progress','status-completed','status-error');
+                    el.classList.add('status-' + node.status);
+                    // Update icon if present
+                    const iconSpan = el.querySelector('.status-icon');
+                    if (iconSpan && iconSpan.textContent !== node.status_icon) {
+                        iconSpan.textContent = node.status_icon;
+                    }
+                }
+            });
+            state.seq = seq;
+            // Update progress bar in panel if provided
+            if (typeof patchMsg.overall_progress === 'number') {
+                const p = document.querySelector(`#panel-${CSS.escape(run_id)} .run-progress-inner`);
+                if (p) p.style.width = patchMsg.overall_progress + '%';
+            }
+        }
+
+        // =============================
+        // Log Streaming UI & Handlers
+        // =============================
+        function ensureRunLogElements(runId) {
+            const panel = document.getElementById('panel-' + runId);
+            if (!panel) return;
+            let logWrap = panel.querySelector('.run-log-wrapper');
+            if (!logWrap) {
+                logWrap = document.createElement('div');
+                logWrap.className = 'run-log-wrapper';
+                logWrap.innerHTML = `<details open style="margin-top:8px;">
+                    <summary style="cursor:pointer;">Live Log & Filters</summary>
+                    <div class="run-log-filters" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:4px;">
+                        <label style="font-size:11px;">Severity:
+                          <select data-log-sev="${runId}" style="font-size:11px;">
+                            <option value="INFO" selected>INFO+</option>
+                            <option value="DEBUG">DEBUG+</option>
+                            <option value="WARN">WARN+</option>
+                            <option value="ERROR">ERROR</option>
+                          </select>
+                        </label>
+                        <label style="font-size:11px;">Source:
+                          <select data-log-src="${runId}" multiple size="1" style="font-size:11px; min-width:90px;">
+                            <option value="agent">agent</option>
+                            <option value="decision">decision</option>
+                            <option value="llm">llm</option>
+                            <option value="tool">tool</option>
+                            <option value="system">system</option>
+                          </select>
+                        </label>
+                        <input data-log-q="${runId}" type="text" placeholder="search..." style="font-size:11px; padding:2px 4px;" />
+                        <button type="button" data-log-refresh="${runId}" style="font-size:11px;">Reload</button>
+                        <a href="/runs/${runId}/logs/download" target="_blank" style="font-size:11px; text-decoration:none;">Download</a>
+                        <span id="log-meta-${runId}" style="font-size:10px; opacity:0.6;">seq:0</span>
+                    </div>
+                    <div class="run-log" id="log-${runId}" style="background:#111; border:1px solid var(--border-color); padding:6px; font-family:monospace; font-size:12px; max-height:180px; overflow:auto; white-space:pre; line-height:1.2;"></div>
+                </details>`;
+                panel.appendChild(logWrap);
+                attachLogFilterEvents(runId);
+            }
+        }
+
+        function attachLogFilterEvents(runId) {
+            const sevSel = document.querySelector(`select[data-log-sev='${runId}']`);
+            const srcSel = document.querySelector(`select[data-log-src='${runId}']`);
+            const qInput = document.querySelector(`input[data-log-q='${runId}']`);
+            const reloadBtn = document.querySelector(`button[data-log-refresh='${runId}']`);
+            if (sevSel) sevSel.addEventListener('change', () => reloadLogs(runId, true));
+            if (srcSel) srcSel.addEventListener('change', () => reloadLogs(runId, true));
+            if (qInput) qInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') reloadLogs(runId, true); });
+            if (reloadBtn) reloadBtn.addEventListener('click', () => reloadLogs(runId, true));
+        }
+
+        function currentLogFilter(runId) {
+            const sevSel = document.querySelector(`select[data-log-sev='${runId}']`);
+            const srcSel = document.querySelector(`select[data-log-src='${runId}']`);
+            const qInput = document.querySelector(`input[data-log-q='${runId}']`);
+            let severity = sevSel ? sevSel.value : 'INFO';
+            const selectedSources = [];
+            if (srcSel) Array.from(srcSel.selectedOptions).forEach(o => selectedSources.push(o.value));
+            const q = qInput ? qInput.value.trim() : '';
+            return { severity, sources: selectedSources, q };
+        }
+
+        function formatLogEntry(entry) {
+            const sev = entry.severity || 'INFO';
+            const iso = entry.iso || '';
+            const src = entry.source || '';
+            const agent = entry.agent_id ? `(${entry.agent_id})` : '';
+            // Simple color tags via spans; CSS classes handle palette
+            return `<div class="log-line sev-${sev}">[${iso}] [${sev}] [${src}]${agent} ${escapeHtml(entry.message||'')}</div>`;
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+        }
+
+        function reloadLogs(runId, reset=false) {
+            if (!window.runLogState) window.runLogState = {};
+            if (!window.runLogState[runId]) window.runLogState[runId] = { seq: 0, syncing: false };
+            const st = window.runLogState[runId];
+            let after_seq = reset ? null : st.seq;
+            const { severity, sources, q } = currentLogFilter(runId);
+            const params = new URLSearchParams();
+            if (severity) params.set('severity', severity);
+            if (sources && sources.length) params.set('sources', sources.join(','));
+            if (q) params.set('q', q);
+            if (after_seq != null) params.set('after_seq', after_seq);
+            params.set('limit', '250');
+            fetch(`/runs/${encodeURIComponent(runId)}/logs?` + params.toString())
+              .then(r=>r.json())
+              .then(js => {
+                const el = document.getElementById('log-' + runId);
+                if (!el) return;
+                if (reset) el.innerHTML='';
+                (js.entries||[]).forEach(e => {
+                    el.insertAdjacentHTML('beforeend', formatLogEntry(e));
+                    st.seq = Math.max(st.seq, e.seq);
+                });
+                updateLogMeta(runId, st.seq);
+                autoScroll(el);
+              })
+              .catch(()=>{});
+        }
+
+        function updateLogMeta(runId, seq) {
+            const meta = document.getElementById('log-meta-' + runId);
+            if (meta) meta.textContent = 'seq:' + seq;
+        }
+
+        function handleRunLogAppend(msg) {
+            if (!window.runLogState || !window.runLogState[msg.run_id]) return;
+            const st = window.runLogState[msg.run_id];
+            if (msg.seq <= st.seq) return;
+            if (msg.seq !== st.seq + 1) {
+                console.warn('[log] gap detected run', msg.run_id, 'expected', st.seq + 1, 'got', msg.seq, 'requesting dump');
+                st.syncing = true;
+                try { ws && ws.send(JSON.stringify({action:'log_dump', run_id: msg.run_id})); } catch {}
+                return;
+            }
+            const el = document.getElementById('log-' + msg.run_id);
+            if (el) {
+                (msg.entries || []).forEach(entry => {
+                    el.insertAdjacentHTML('beforeend', formatLogEntry(entry));
+                    st.seq = Math.max(st.seq, entry.seq);
+                });
+                updateLogMeta(msg.run_id, st.seq);
+                autoScroll(el);
+            } else {
+                st.seq = msg.seq;
+            }
+        }
+
+        function handleRunLogSnapshot(msg) {
+            if (!window.runLogState) window.runLogState = {};
+            window.runLogState[msg.run_id] = { seq: msg.seq, syncing: false };
+            ensureRunLogElements(msg.run_id);
+            const el = document.getElementById('log-' + msg.run_id);
+            if (el) {
+                el.innerHTML='';
+                (msg.entries || []).forEach(entry => {
+                    el.insertAdjacentHTML('beforeend', formatLogEntry(entry));
+                });
+                updateLogMeta(msg.run_id, msg.seq);
+                autoScroll(el);
+            }
+        }
+
+        function autoScroll(container) {
+            if (!container) return;
+            const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 30;
+            if (nearBottom) container.scrollTop = container.scrollHeight;
+        }
+
+        function cancelRun(runId) {
+            fetch(`/runs/${encodeURIComponent(runId)}/cancel`, {method:'POST'})
+              .then(r=>r.json())
+              .then(js=>{ updateRunTab(runId, 'canceled'); })
+              .catch(()=>{});
+        }
+
+        function startMultiRun(ev) {
+            ev.preventDefault();
+            const form = ev.target;
+            const fd = new FormData(form);
+            ensureMultiRunVisible();
+            // Kick off aggregate websocket if not connected yet
+            if (!wsConnected) connectWebSocket();
+            fetch('/start-multi', {method:'POST', body: fd})
+              .then(r=> r.json())
+              .then(js => {
+                if (js.runs) {
+                    js.runs.forEach(r => ensureRunTab(r.run_id, r.ticker, 'in_progress'));
+                    // Activate first run automatically
+                    if (js.runs.length) activateRun(js.runs[0].run_id);
+                } else if (js.error) {
+                    alert('Error: ' + js.error);
+                }
+              })
+              .catch(err => console.error('multi-run start failed', err));
+        }
 
         // Handle when new content is loaded (like when starting a process)
         document.addEventListener('htmx:afterSettle', function(event) {

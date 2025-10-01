@@ -736,6 +736,8 @@ def _get_valid_models(provider):
 def _call_llm_api(prompt, config):
     """Helper function to call either OpenAI or Gemini API based on configuration"""
     provider = config["llm_provider"]
+    # Lazy import to avoid circulars & only pay cost on first usage
+    from tradingagents.utils.concurrency import llm_call
     
     if provider == "gemini":
         # Use Gemini
@@ -761,7 +763,8 @@ def _call_llm_api(prompt, config):
                 max_tokens=4096,
                 google_api_key=api_key
             )
-            response = gemini_model.invoke(prompt)
+            with llm_call():
+                response = gemini_model.invoke(prompt)
             return response.content
             
         except NotFound as e:
@@ -820,18 +823,19 @@ def _call_llm_api(prompt, config):
         try:
             # Centralized client creation (ensures base_url + correct key usage)
             client, _embedding_hint = build_openai_compatible_client(config, purpose="chat")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": prompt,
-                    }
-                ],
-                temperature=1,
-                max_tokens=4096,
-                top_p=1,
-            )
+            with llm_call():
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": prompt,
+                        }
+                    ],
+                    temperature=1,
+                    max_tokens=4096,
+                    top_p=1,
+                )
             return response.choices[0].message.content
             
         except NotFoundError as e:

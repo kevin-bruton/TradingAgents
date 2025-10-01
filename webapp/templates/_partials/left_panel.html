@@ -1,5 +1,10 @@
 {% macro render_item(item) %}
-    <li class="process-item status-{{ item.status }}" id="item-{{ item.id }}">
+    {# Determine extra classes #}
+    {% set extra_classes = [] %}
+    {% if item.status == 'in_progress' %}
+        {% set _ = extra_classes.append('active-node') %}
+    {% endif %}
+    <li class="process-item status-{{ item.status }} {{ ' '.join(extra_classes) }}" id="item-{{ item.id }}" data-node-type="{{ item.node_type }}" data-started="{{ item.started_at }}" data-ended="{{ item.ended_at }}">
         <div class="item-header">
             {% if item.children %}
                 <button class="toggle-btn" onclick="toggleNode(this)" aria-label="Toggle children">
@@ -13,10 +18,19 @@
                     {% if item.status == 'completed' %}✅
                     {% elif item.status == 'in_progress' %}⏳
                     {% elif item.status == 'error' %}❌
+                    {% elif item.status == 'canceled' %}⛔
                     {% else %}⏸️
                     {% endif %}
                 </span>
                 {{ item.name }}
+                <span class="meta small">
+                    {% if item.node_type %}<code class="nodetype">{{ item.node_type }}</code>{% endif %}
+                    {% if item.duration_ms %}
+                        <span class="duration">{{ '%.2f' % (item.duration_ms / 1000.0) }}s</span>
+                    {% elif item.started_at and not item.ended_at %}
+                        <span class="duration">…</span>
+                    {% endif %}
+                </span>
             </span>
         </div>
         {% if item.children %}
