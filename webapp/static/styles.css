@@ -612,3 +612,65 @@ pre.message-content {
 .cancel-btn { background:#ef4444; border:none; color:#fff; padding:6px 10px; border-radius:4px; cursor:pointer; font-size:0.75rem; }
 .cancel-btn:hover { background:#dc2626; }
 .tree-node { font-size:0.8rem; padding:2px 0; border-left:2px solid var(--border-color); margin-left:6px; padding-left:6px; }
+
+/* ============================= */
+/* New Instrument Tabs & Trees   */
+/* ============================= */
+.instrument-tabs {
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    margin:8px 0 6px 0;
+}
+.instrument-tab {
+    background: var(--bg-secondary);
+    border:1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding:4px 10px;
+    border-radius:4px;
+    font-size:0.75rem;
+    cursor:pointer;
+    line-height:1.2;
+    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+}
+.instrument-tab:hover { background: var(--hover-color); color: var(--text-primary); }
+.instrument-tab.active { background: var(--bg-primary); color: var(--text-primary); box-shadow:0 0 0 1px var(--border-color) inset; }
+
+.instrument-tree-wrapper { display:none; margin-bottom:14px; }
+.instrument-tree-wrapper:first-of-type { display:block; }
+.instrument-tree-wrapper .run-progress { margin:4px 0 6px 0; }
+
+.leaf-node .item-name { font-size:0.72rem; opacity:0.85; }
+.leaf-node .item-name:hover { background: var(--hover-color); }
+
+/* Right panel refreshed layout */
+.right-panel-inner { max-width: 980px; margin:0 auto; }
+.right-panel-inner .status-summary { background: var(--bg-secondary); padding:14px 18px; border:1px solid var(--border-color); border-radius:8px; font-size:0.85rem; line-height:1.4; }
+.right-panel-inner .status-summary ul { list-style:none; padding-left:0; margin:6px 0 0 0; }
+.right-panel-inner .status-summary li { padding:3px 4px; border-left:3px solid var(--border-color); margin-bottom:3px; font-size:0.75rem; }
+.right-panel-inner .status-summary li.status-completed { border-color: var(--accent-color); color: var(--accent-color); }
+.right-panel-inner .status-summary li.status-in_progress { border-color:#3b82f6; color:#3b82f6; }
+.right-panel-inner .status-summary li.status-error { border-color:#ef4444; color:#ef4444; }
+
+/* Log Filter Modal */
+#log-filter-modal { border:1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); padding:0; border-radius:10px; width:340px; }
+#log-filter-modal::backdrop { background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); }
+.log-filter-form { padding:18px 20px 20px 20px; display:flex; flex-direction:column; gap:12px; }
+.log-filter-form h3 { margin:0 0 4px 0; font-size:1rem; }
+.log-filter-form label { display:flex; flex-direction:column; gap:4px; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; color: var(--text-secondary); }
+.log-filter-form select, .log-filter-form input { background: var(--input-bg); color: var(--text-primary); border:1px solid var(--border-color); padding:6px 8px; border-radius:4px; font-size:0.75rem; }
+.log-filter-form button.primary { background: var(--accent-color); color:#fff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.75rem; }
+.log-filter-form button { background: var(--hover-color); color: var(--text-secondary); border:1px solid var(--border-color); padding:6px 12px; border-radius:4px; cursor:pointer; font-size:0.7rem; }
+.log-filter-form button:hover { color: var(--text-primary); }
+.log-filter-form button.primary:hover { filter: brightness(1.1); }
+
+/* Small generic button */
+.small-btn { background: var(--input-bg); border:1px solid var(--border-color); color: var(--text-secondary); padding:4px 8px; border-radius:4px; font-size:0.65rem; cursor:pointer; }
+.small-btn:hover { background: var(--hover-color); color: var(--text-primary); }
+
+/* Active node highlight (selection) */
+.item-name.clickable.active { outline:1px solid var(--accent-color); background: rgba(76,175,80,0.12); }
+
+/* Placeholder text in right panel */
+#right-panel .placeholder { opacity:0.6; font-size:0.9rem; }
+

@@ -28,9 +28,9 @@ required_env_vars = [
 ]
 
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
-ENABLE_WS_PATCHES = os.getenv("ENABLE_WS_PATCHES", "0") == "1"  # Feature flag for diff/patch optimization
-ENABLE_LOG_STREAM = os.getenv("ENABLE_LOG_STREAM", "0") == "1"  # Feature flag for live log streaming
-ENABLE_CONTENT_PATCHES = os.getenv("ENABLE_CONTENT_PATCHES", "1") == "1"  # Feature flag for granular content diff (reports/messages)
+ENABLE_WS_PATCHES = True  # Always on: diff/patch optimization
+ENABLE_LOG_STREAM = True  # Always on: live log streaming
+ENABLE_CONTENT_PATCHES = True  # Always on: granular content diff (reports/messages)
 if ENABLE_WS_PATCHES:
     # Per-run patch tracking: seq + last flattened snapshot
     _patch_state_lock = threading.Lock()
@@ -2114,7 +2114,7 @@ async def websocket_endpoint(websocket: WebSocket, run_id: str | None = None, pa
                     with app_state_lock:
                         item = find_item_in_tree(item_id, app_state.get("execution_tree", []))
                 if item:
-                    html = jinja_env.get_template("_partials/right_panel.html").render(content=item.get("content", "No content available."))
+                    html = jinja_env.get_template("_partials/right_panel.html").render(item=item, content=item.get("content", "No content available."))
                     await websocket.send_json({"type": "content", "item_id": item_id, "html": html})
                 else:
                     await websocket.send_json({"type": "error", "message": f"Item {item_id} not found"})
@@ -2185,13 +2185,90 @@ def find_item_in_tree(item_id: str, tree: list) -> Dict[str, Any] | None:
 
 @app.get("/content/{item_id}", response_class=HTMLResponse)
 async def get_item_content(item_id: str):
+    """Legacy single-run content fetch. Also resolve synthetic *_messages/_report if present."""
+    # If the item itself is a real leaf node (id ends with _messages/_report) and exists in tree, we will serve it directly.
+    base_id = None
+    kind = None
+    if item_id.endswith("_messages"):
+        kind = "messages"
+    elif item_id.endswith("_report"):
+        kind = "report"
     with app_state_lock:
-        item = find_item_in_tree(item_id, app_state["execution_tree"])
-        if item:
+        tree = app_state["execution_tree"]
+        # Direct attempt: does the exact item_id exist already (real leaf)?
+        direct_item = find_item_in_tree(item_id, tree)
+        if direct_item and kind:
+            content_text = direct_item.get("content", "No content available.")
             template = jinja_env.get_template("_partials/right_panel.html")
-            return template.render(content=item.get("content", "No content available."))
-        else:
+            return template.render(item=direct_item, content=content_text)
+        # Fallback: treat as synthetic derived from its agent
+        base_id = item_id[:-9] if kind == 'messages' else (item_id[:-7] if kind == 'report' else None)
+        target_id = base_id or item_id
+        agent_or_item = find_item_in_tree(target_id, tree)
+        if not agent_or_item:
             return HTMLResponse(content="<p>Item not found.</p>", status_code=404)
+        content_text = agent_or_item.get("content", "No content available.")
+        if kind == 'messages' and isinstance(agent_or_item.get('messages'), str):
+            content_text = agent_or_item['messages']
+        elif kind == 'report' and isinstance(agent_or_item.get('report'), str):
+            content_text = agent_or_item['report']
+        synthetic = {
+            "id": item_id,
+            "name": f"{agent_or_item.get('name','')} {kind.title()}" if kind else agent_or_item.get('name',''),
+            "status": agent_or_item.get("status", "pending"),
+            "content": content_text,
+            "children": [],
+            "started_at": agent_or_item.get("started_at"),
+            "ended_at": agent_or_item.get("ended_at"),
+            "duration_ms": agent_or_item.get("duration_ms"),
+        }
+        template = jinja_env.get_template("_partials/right_panel.html")
+        return template.render(item=synthetic, content=content_text)
+
+@app.get("/runs/{run_id}/content/{item_id}", response_class=HTMLResponse)
+async def get_run_item_content(run_id: str, item_id: str):
+    """Run-scoped content fetch supporting synthetic *_messages / *_report leaf nodes.
+
+    The client fabricates IDs like <agent_id>_messages or <agent_id>_report.
+    We strip the suffix to locate the agent node, then select appropriate field.
+    """
+    run = run_manager.get_run(run_id) if ENABLE_MULTI_RUN else None
+    if not run:
+        return HTMLResponse(content="<p>Run not found.</p>", status_code=404)
+    tree = run.get("execution_tree", []) or []
+    kind = None
+    if item_id.endswith('_messages'):
+        kind = 'messages'
+    elif item_id.endswith('_report'):
+        kind = 'report'
+    # First try direct leaf lookup (already present node)
+    direct_item = find_item_in_tree(item_id, tree)
+    if direct_item and kind:
+        content_text = direct_item.get('content', 'No content available.')
+        template = jinja_env.get_template('_partials/right_panel.html')
+        return template.render(item=direct_item, content=content_text)
+    # Fallback: derive from agent
+    base_id = item_id[:-9] if kind == 'messages' else (item_id[:-7] if kind == 'report' else item_id)
+    agent_item = find_item_in_tree(base_id, tree)
+    if not agent_item:
+        return HTMLResponse(content='<p>Item not found.</p>', status_code=404)
+    content_text = agent_item.get('content', 'No content available.')
+    if kind == 'messages' and isinstance(agent_item.get('messages'), str):
+        content_text = agent_item['messages']
+    elif kind == 'report' and isinstance(agent_item.get('report'), str):
+        content_text = agent_item['report']
+    synthetic = {
+        'id': item_id,
+        'name': f"{agent_item.get('name','')} {kind.title()}" if kind else agent_item.get('name',''),
+        'status': agent_item.get('status', 'pending'),
+        'content': content_text,
+        'children': [],
+        'started_at': agent_item.get('started_at'),
+        'ended_at': agent_item.get('ended_at'),
+        'duration_ms': agent_item.get('duration_ms'),
+    }
+    template = jinja_env.get_template('_partials/right_panel.html')
+    return template.render(item=synthetic, content=content_text)
 
 # To run this app:
 # uvicorn webapp.main:app --reload
