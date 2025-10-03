@@ -14,11 +14,11 @@
         <div class="item-header">
             {% set has_children = item.children or item.synthetic_children %}
             {% if has_children %}
-                <button class="toggle-btn" onclick="toggleNode(this)" aria-label="Toggle children"><span class="toggle-icon">▶</span></button>
+                <button class="toggle-btn" data-action="toggle-node" aria-label="Toggle children"><span class="toggle-icon">▶</span></button>
             {% else %}
                 <span class="toggle-spacer"></span>
             {% endif %}
-            <span class="item-name clickable" data-item-id="{{ item.id }}" onclick="selectNode(event,'{{ item.id }}')">
+            <span class="item-name clickable" data-item-id="{{ item.id }}" data-run-id="default">
                 <span class="status-icon" id="status-icon-{{ item.id }}">
                     {% if item.status == 'completed' %}✅
                     {% elif item.status == 'in_progress' %}⏳
@@ -44,7 +44,7 @@
                         <li class="process-item leaf-node status-{{ leaf.status }}" id="item-{{ leaf.id }}" data-node-type="leaf">
                             <div class="item-header">
                                 <span class="toggle-spacer"></span>
-                                <span class="item-name clickable" data-item-id="{{ leaf.id }}" onclick="selectNode(event,'{{ leaf.id }}')">
+                                <span class="item-name clickable" data-item-id="{{ leaf.id }}" data-run-id="default">
                                     <span class="status-icon" id="status-icon-{{ leaf.id }}">
                                         {% if leaf.status == 'completed' %}✅{% elif leaf.status == 'in_progress' %}⏳{% elif leaf.status == 'error' %}❌{% else %}⏸️{% endif %}
                                     </span>
@@ -58,9 +58,6 @@
         {% endif %}
     </li>
 {% endmacro %}
-
-<div id="overall-progress-bar" hx-swap-oob="true" style="width:{{ app_state.overall_progress }}%;"></div>
-<span id="overall-progress-text" hx-swap-oob="true">{{ app_state.overall_progress }}% ({{ app_state.overall_status }})</span>
 
 <h2>
     {% if app_state.company_symbol %}

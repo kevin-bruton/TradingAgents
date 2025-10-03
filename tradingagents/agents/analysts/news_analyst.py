@@ -64,8 +64,16 @@ def create_news_analyst(llm, toolkit):
         if getattr(result, 'tool_calls', []) == []:
             report = getattr(result, 'content', '')
 
+        msg = result
+        try:
+            from langchain_core.messages import AIMessage
+            if not isinstance(result, AIMessage):
+                msg = AIMessage(content=getattr(result, 'content', str(result)))
+        except Exception:
+            msg = {"type": "ai", "content": getattr(result, 'content', str(result))}
+
         return {
-            "messages": [result],
+            "messages": [msg],
             "news_report": report,
         }
 

@@ -1450,6 +1450,39 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
                     if phase.get("status") in ("pending", "in_progress"):
                         phase["status"] = "canceled"
                 run_manager.update_run(run_id, status="canceled", execution_tree=tree)
+                # Broadcast final canceled status to ensure UI reflects cancellation
+                if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+                    try:
+                        async def _emit_canceled():
+                            run = run_manager.get_run(run_id)
+                            if not run:
+                                return
+                            payload = {
+                                "type": "status_update_run",
+                                "run_id": run_id,
+                                "status": "canceled",
+                                "overall_progress": run["overall_progress"],
+                                "ticker": run["ticker"],
+                            }
+                            # Send final patch if enabled
+                            if ENABLE_WS_PATCHES:
+                                seq, changed = _compute_patch(run_id, run.get("execution_tree", []))
+                                if changed:
+                                    patch_payload = {
+                                        "type": "status_patch_run",
+                                        "run_id": run_id,
+                                        "seq": seq,
+                                        "changed": changed,
+                                        "overall_progress": run["overall_progress"],
+                                        "status": "canceled",
+                                    }
+                                    await manager.broadcast_json(patch_payload)
+                            await manager.broadcast_json(payload)
+                            # Also broadcast aggregate update to ensure ALL tabs (inactive ones too) get updated
+                            await _broadcast_status_locked_unlocked()
+                        asyncio.run_coroutine_threadsafe(_emit_canceled(), MAIN_EVENT_LOOP)
+                    except Exception as broadcast_err:
+                        print(f"Warning: Failed to broadcast final canceled status: {broadcast_err}")
             else:
                 with app_state_lock:
                     for phase in app_state.get("execution_tree", []):
@@ -1475,6 +1508,72 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
                 pass
             except Exception:
                 pass
+            # Broadcast final status update to ensure UI reflects completion
+            if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+                try:
+                    async def _emit_final():
+                        run = run_manager.get_run(run_id)
+                        if not run:
+                            return
+                        payload = {
+                            "type": "status_update_run",
+                            "run_id": run_id,
+                            "status": "completed",
+                            "overall_progress": 100,
+                            "ticker": run["ticker"],
+                        }
+                        # Include final decision if available
+                        if processed_signal is not None:
+                            try:
+                                if isinstance(processed_signal, dict) and processed_signal.get("version") == 1:
+                                    # Build concise markdown from enriched schema
+                                    risk = processed_signal.get("risk_metrics", {})
+                                    conf = processed_signal.get("confidence", {})
+                                    md_lines = [f"**Summary:** {processed_signal.get('summary','')}"]
+                                    if processed_signal.get("action"):
+                                        md_lines.append(f"**Action:** `{processed_signal['action']}`")
+                                    if any(risk.get(k) for k in ("stop_loss","take_profit","reward_risk_ratio")):
+                                        rbits = []
+                                        if risk.get("stop_loss"): rbits.append(f"SL {risk['stop_loss']}")
+                                        if risk.get("take_profit"): rbits.append(f"TP {risk['take_profit']}")
+                                        if risk.get("reward_risk_ratio") is not None: rbits.append(f"R/R {risk['reward_risk_ratio']}")
+                                        md_lines.append("**Risk:** " + ", ".join(rbits))
+                                    if conf.get("score") is not None:
+                                        md_lines.append(f"**Confidence:** {conf['score']}")
+                                    if processed_signal.get("rationale"):
+                                        md_lines.append("\n**Rationale:**")
+                                        for r in processed_signal["rationale"][:5]:
+                                            md_lines.append(f"- {r}")
+                                    md_lines.append("\n<details><summary>Raw Decision</summary>\n\n" + (processed_signal.get("raw") or "") + "\n\n</details>")
+                                    md_source = "\n".join(md_lines)
+                                elif isinstance(processed_signal, (str, bytes)):
+                                    md_source = processed_signal.decode() if isinstance(processed_signal, bytes) else processed_signal
+                                else:
+                                    md_source = str(processed_signal)
+                                decision_html = render_markdown(md_source)
+                                payload["final_decision"] = processed_signal
+                                payload["decision_html"] = decision_html
+                            except Exception:
+                                pass
+                        # Send final patch if enabled
+                        if ENABLE_WS_PATCHES:
+                            seq, changed = _compute_patch(run_id, run.get("execution_tree", []))
+                            if changed:
+                                patch_payload = {
+                                    "type": "status_patch_run",
+                                    "run_id": run_id,
+                                    "seq": seq,
+                                    "changed": changed,
+                                    "overall_progress": 100,
+                                    "status": "completed",
+                                }
+                                await manager.broadcast_json(patch_payload)
+                        await manager.broadcast_json(payload)
+                        # Also broadcast aggregate update to ensure ALL tabs (inactive ones too) get updated
+                        await _broadcast_status_locked_unlocked()
+                    asyncio.run_coroutine_threadsafe(_emit_final(), MAIN_EVENT_LOOP)
+                except Exception as broadcast_err:
+                    print(f"Warning: Failed to broadcast final completion status: {broadcast_err}")
         else:
             with app_state_lock:
                 app_state["overall_status"] = "completed"
@@ -1540,6 +1639,40 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
                 pass
             except Exception:
                 pass
+            # Broadcast final error status to ensure UI reflects error
+            if MAIN_EVENT_LOOP and not MAIN_EVENT_LOOP.is_closed():
+                try:
+                    async def _emit_error():
+                        run = run_manager.get_run(run_id)
+                        if not run:
+                            return
+                        payload = {
+                            "type": "status_update_run",
+                            "run_id": run_id,
+                            "status": "error",
+                            "overall_progress": 100,
+                            "ticker": run["ticker"],
+                            "error": str(e),
+                        }
+                        # Send final patch if enabled
+                        if ENABLE_WS_PATCHES:
+                            seq, changed = _compute_patch(run_id, run.get("execution_tree", []))
+                            if changed:
+                                patch_payload = {
+                                    "type": "status_patch_run",
+                                    "run_id": run_id,
+                                    "seq": seq,
+                                    "changed": changed,
+                                    "overall_progress": 100,
+                                    "status": "error",
+                                }
+                                await manager.broadcast_json(patch_payload)
+                        await manager.broadcast_json(payload)
+                        # Also broadcast aggregate update to ensure ALL tabs (inactive ones too) get updated
+                        await _broadcast_status_locked_unlocked()
+                    asyncio.run_coroutine_threadsafe(_emit_error(), MAIN_EVENT_LOOP)
+                except Exception as broadcast_err:
+                    print(f"Warning: Failed to broadcast final error status: {broadcast_err}")
         else:
             with app_state_lock:
                 app_state["overall_status"] = "error"

@@ -15,7 +15,7 @@
             <h3>{{ node.name }}</h3>
             <div class="markdown-body">{{ (node.content or 'No content available.') | markdown | safe }}</div>
         {% else %}
-            <h3>{{ node.name }} <small style="font-weight:normal;opacity:0.6;">Status</small></h3>
+            <h3>{{ node.name }}</h3>
             <div class="status-summary">
                 <p><strong>Status:</strong> {{ node.status }}</p>
                 {% if node.started_at %}<p><strong>Started:</strong> {{ node.started_at }}</p>{% endif %}

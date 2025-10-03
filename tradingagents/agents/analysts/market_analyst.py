@@ -105,8 +105,19 @@ Bullish and Bearish Candlestick Patterns:
         if getattr(result, 'tool_calls', []) == []:
             report = getattr(result, 'content', '')
        
+        # Coerce result into a LangChain-compatible AI message structure if it's a fallback DummyResult.
+        msg = result
+        try:
+            from langchain_core.messages import AIMessage
+            if not isinstance(result, AIMessage):
+                # Construct an AIMessage with minimal fields
+                msg = AIMessage(content=getattr(result, 'content', str(result)))
+        except Exception:
+            # Fallback: create plain dict that downstream code can stringify
+            msg = {"type": "ai", "content": getattr(result, 'content', str(result))}
+
         return {
-            "messages": [result],
+            "messages": [msg],
             "market_report": report,
         }
 

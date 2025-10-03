@@ -63,8 +63,16 @@ def create_social_media_analyst(llm, toolkit):
         if getattr(result, 'tool_calls', []) == []:
             report = getattr(result, 'content', '')
 
+        msg = result
+        try:
+            from langchain_core.messages import AIMessage
+            if not isinstance(result, AIMessage):
+                msg = AIMessage(content=getattr(result, 'content', str(result)))
+        except Exception:
+            msg = {"type": "ai", "content": getattr(result, 'content', str(result))}
+
         return {
-            "messages": [result],
+            "messages": [msg],
             "sentiment_report": report,
         }
 
