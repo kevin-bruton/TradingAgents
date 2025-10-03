@@ -53,6 +53,12 @@ Conversation history of the debate: {history}
 Last bull argument: {current_response}
 Reflections from similar situations and lessons learned: {past_memory_str}
 Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock. You must also address reflections and learn from lessons and mistakes you made in the past.
+
+IMPORTANT MARKDOWN FORMATTING GUIDELINES:
+- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values
+- For example, write 'approximately $250' or 'around $250' instead of '~$250'
+- If you need to use strikethrough, use double tildes (~~text~~) not single tilde
+- This ensures proper markdown rendering in the web interface
 """
         response = safe_invoke_llm(llm, prompt)
 

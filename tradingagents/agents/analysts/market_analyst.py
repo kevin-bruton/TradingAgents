@@ -60,6 +60,12 @@ Bullish and Bearish Candlestick Patterns:
 
 - Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_YFin_data first to retrieve the CSV that is needed to generate indicators. Write a very detailed and nuanced report of the trends you observe. Do not simply state the trends are mixed, provide detailed and finegrained analysis and insights that may help traders make decisions."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+            + """ 
+IMPORTANT MARKDOWN FORMATTING GUIDELINES:
+- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values
+- For example, write 'approximately $250' or 'around $250' instead of '~$250'
+- If you need to use strikethrough, use double tildes (~~text~~) not single tilde
+- This ensures proper markdown rendering in the web interface"""
         )
 
         prompt = ChatPromptTemplate.from_messages(

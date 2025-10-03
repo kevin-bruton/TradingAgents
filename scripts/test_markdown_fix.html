@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Markdown Rendering Test - Tilde Fix</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }
+        .markdown-output {
+            background: #fafafa;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 10px 0;
+        }
+        .label {
+            font-weight: bold;
+            color: #555;
+            margin-top: 15px;
+        }
+        pre {
+            background: #272822;
+            color: #f8f8f2;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Markdown Rendering Test: Tilde (~) Fix</h1>
+    
+    <div class="test-section">
+        <h2>Problem: Default "marked" with GFM</h2>
+        <p>The default configuration interprets single tilde (~) as strikethrough, causing issues with approximate values.</p>
+        <pre>const testMarkdown = "The price dropped from ~$250 to ~$200, representing ~20% decline.";</pre>
+        <div class="label">Rendered with default config (BROKEN):</div>
+        <div id="default-output" class="markdown-output"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Solution: Custom Extension</h2>
+        <p>We override the strikethrough behavior to only recognize double tildes (~~) as per proper GFM standard.</p>
+        <div class="label">Rendered with custom extension (FIXED):</div>
+        <div id="fixed-output" class="markdown-output"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Additional Test Cases</h2>
+        <div class="label">Various tilde usage scenarios:</div>
+        <div id="additional-output" class="markdown-output"></div>
+    </div>
+
+    <script>
+        const testMarkdown = `### Stock Analysis Report
+
+The price dropped from ~$250 to ~$200, representing a ~20% decline.
+
+**Key Points:**
+- Support level at ~$187
+- Resistance around ~$260
+- ATR peaked near ~5.0
+
+The 50 SMA (~231) provides dynamic support.
+
+**Percentage Changes:**
+- Q1: ~15% gain
+- Q2: ~8% decline
+- Overall: ~5% increase
+
+Price gap of ~5-8 points suggests volatility.
+`;
+
+        const additionalTests = `### Testing Different Scenarios
+
+1. **Approximation with tilde**: ~$250 or ~20%
+2. **Proper strikethrough**: ~~This should be crossed out~~
+3. **Mixed usage**: The price of ~$300 was ~~incorrect~~ revised to ~$250
+4. **Math notation**: Temperature of ~98°F or ~37°C
+5. **Range notation**: ~5-8 points or approximately 5-8 points
+6. **File paths**: ~/Documents/file.txt (home directory)
+`;
+
+        // Default marked config (demonstrates the problem)
+        try {
+            const defaultHtml = marked.parse(testMarkdown, { breaks: true, gfm: true });
+            document.getElementById('default-output').innerHTML = defaultHtml;
+        } catch (e) {
+            document.getElementById('default-output').innerHTML = 'Error: ' + e.message;
+        }
+
+        // Fixed config with custom extension
+        try {
+            const fixedHtml = marked.parse(testMarkdown, {
+                breaks: true,
+                gfm: true,
+                extensions: [{
+                    name: 'del',
+                    level: 'inline',
+                    start(src) { return src.match(/~~/)?.index; },
+                    tokenizer(src) {
+                        const match = src.match(/^~~(?=\\S)([\\s\\S]*?\\S)~~/);
+                        if (match) {
+                            return {
+                                type: 'del',
+                                raw: match[0],
+                                text: match[1]
+                            };
+                        }
+                    },
+                    renderer(token) {
+                        return `<del>${this.parser.parseInline(token.text)}</del>`;
+                    }
+                }]
+            });
+            document.getElementById('fixed-output').innerHTML = fixedHtml;
+        } catch (e) {
+            document.getElementById('fixed-output').innerHTML = 'Error: ' + e.message;
+        }
+
+        // Additional tests
+        try {
+            const additionalHtml = marked.parse(additionalTests, {
+                breaks: true,
+                gfm: true,
+                extensions: [{
+                    name: 'del',
+                    level: 'inline',
+                    start(src) { return src.match(/~~/)?.index; },
+                    tokenizer(src) {
+                        const match = src.match(/^~~(?=\\S)([\\s\\S]*?\\S)~~/);
+                        if (match) {
+                            return {
+                                type: 'del',
+                                raw: match[0],
+                                text: match[1]
+                            };
+                        }
+                    },
+                    renderer(token) {
+                        return `<del>${this.parser.parseInline(token.text)}</del>`;
+                    }
+                }]
+            });
+            document.getElementById('additional-output').innerHTML = additionalHtml;
+        } catch (e) {
+            document.getElementById('additional-output').innerHTML = 'Error: ' + e.message;
+        }
+    </script>
+</body>
+</html>

@@ -41,7 +41,13 @@ Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
 Here is the current conversation history: {history} Here is the last response from the risky analyst: {current_risky_response} Here is the last response from the safe analyst: {current_safe_response}. If there are no responses from the other viewpoints, do not halluncinate and just present your point.
 
-Engage actively by analyzing both sides critically, addressing weaknesses in the risky and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting."""
+Engage actively by analyzing both sides critically, addressing weaknesses in the risky and conservative arguments to advocate for a more balanced approach. Challenge each of their points to illustrate why a moderate risk strategy might offer the best of both worlds, providing growth potential while safeguarding against extreme volatility. Focus on debating rather than simply presenting data, aiming to show that a balanced view can lead to the most reliable outcomes. Output conversationally as if you are speaking without any special formatting.
+
+IMPORTANT MARKDOWN FORMATTING GUIDELINES:
+- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values
+- For example, write 'approximately $250' or 'around $250' instead of '~$250'
+- If you need to use strikethrough, use double tildes (~~text~~) not single tilde
+- This ensures proper markdown rendering in the web interface"""
         response = safe_invoke_llm(llm, prompt)
 
         argument = f"Neutral Analyst: {response.content}"

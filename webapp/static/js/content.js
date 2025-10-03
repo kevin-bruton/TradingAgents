@@ -6,7 +6,32 @@ export function renderContentForItem(itemId, raw) {
   const isReport = /_report$/.test(itemId);
   const isMessages = /_messages$/.test(itemId);
   if (isReport || isMessages || isLikelyMarkdown(raw)) {
-    try { return window.marked.parse(raw, { breaks: true, gfm: true }); } catch { return raw; }
+    try { 
+      return window.marked.parse(raw, { 
+        breaks: true, 
+        gfm: true,
+        // Disable single-tilde strikethrough to prevent ~$250 from being treated as strikethrough
+        // GFM standard uses ~~ for strikethrough, not single ~
+        extensions: [{
+          name: 'del',
+          level: 'inline',
+          start(src) { return src.match(/~~/)?.index; },
+          tokenizer(src) {
+            const match = src.match(/^~~(?=\S)([\s\S]*?\S)~~/);
+            if (match) {
+              return {
+                type: 'del',
+                raw: match[0],
+                text: match[1]
+              };
+            }
+          },
+          renderer(token) {
+            return `<del>${this.parser.parseInline(token.text)}</del>`;
+          }
+        }]
+      }); 
+    } catch { return raw; }
   }
   return raw;
 }
