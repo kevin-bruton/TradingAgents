@@ -66,13 +66,6 @@
         Execution Status
     {% endif %}
 </h2>
-
-<div class="instruments-header" style="display:flex; align-items:center; justify-content:space-between; margin-top:0.5rem;">
-    <strong>Instruments</strong>
-    <div>
-        <button type="button" class="small-btn" onclick="openLogFilterModal()">Filter Logs</button>
-    </div>
-</div>
 <div id="instrument-tabs" class="instrument-tabs" role="tablist" aria-label="Instrument Executions">
     {# Tabs populated dynamically by JS (multi-run) #}
 </div>
@@ -86,6 +79,12 @@
     {% else %}
         <p class="placeholder">No executions yet.</p>
     {% endif %}
+</div>
+
+<div class="instruments-header" style="display:flex; align-items:center; justify-content:space-between; margin-top:0.5rem;">
+    <div>
+        <button type="button" class="small-btn" onclick="openLogFilterModal()">Filter Logs</button>
+    </div>
 </div>
 
 <dialog id="log-filter-modal">

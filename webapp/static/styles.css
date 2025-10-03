@@ -2,10 +2,13 @@
 :root {
     --bg-primary: #1a1a1a;
     --bg-secondary: #242424;
+    --bg-tertiary: #2d2d2d;  /* Lighter background for active elements */
+    --bg-tab-inactive: #1f1f1f;  /* Darker for inactive tabs */
     --text-primary: #e0e0e0;
     --text-secondary: #a0a0a0;
     --accent-color: #4CAF50;
     --border-color: #333;
+    --border-color-light: #404040;  /* Lighter border for active elements */
     --input-bg: #2a2a2a;
     --hover-color: #333;
 }
@@ -577,30 +580,44 @@ pre.message-content {
 /* ============================= */
 .run-tabs {
     display: flex;
-    gap: 6px;
-    border-bottom: 1px solid var(--border-color);
-    padding: 6px 4px 4px 4px;
+    gap: 4px;
+    border-bottom: 2px solid var(--border-color);
+    padding: 8px 8px 0 8px;
     flex-wrap: wrap;
+    background: var(--bg-primary);  /* Darkest background */
 }
 .run-tab {
-    background: var(--bg-secondary);
+    background: var(--bg-tab-inactive);  /* Dark inactive tabs */
     border: 1px solid var(--border-color);
+    border-bottom: none;
     color: var(--text-secondary);
-    padding: 6px 10px;
-    border-radius: 4px 4px 0 0;
+    padding: 8px 14px;
+    border-radius: 6px 6px 0 0;
     cursor: pointer;
     font-size: 0.85rem;
     line-height: 1.2;
     position: relative;
-    transition: background-color 0.2s ease, color 0.2s ease;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.1s ease;
+    margin-bottom: -2px;
 }
-.run-tab.active, .run-tab:hover {
-    background: var(--bg-primary);
+.run-tab:hover {
+    background: var(--bg-secondary);
     color: var(--text-primary);
+}
+.run-tab.active {
+    background: var(--bg-tertiary);  /* Lighter background for active tab */
+    color: var(--text-primary);
+    border-color: var(--border-color-light);
+    border-bottom: 2px solid var(--bg-tertiary);
+    z-index: 1;
+    font-weight: 500;
 }
 .run-panels {
     position: relative;
     flex: 1;
+    background: var(--bg-tertiary);  /* Match active tab background */
+    border: 1px solid var(--border-color-light);
+    border-top: none;
 }
 .run-panel { display: none; padding: 16px; }
 .run-panel:first-child { display: block; }
@@ -617,25 +634,49 @@ pre.message-content {
 /* ============================= */
 .instrument-tabs {
     display:flex;
-    gap:6px;
+    gap:4px;
     flex-wrap:wrap;
-    margin:8px 0 6px 0;
+    margin:8px 0 0 0;
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 0;
+    background: var(--bg-secondary);  /* Slightly darker background for tab bar */
 }
 .instrument-tab {
-    background: var(--bg-secondary);
-    border:1px solid var(--border-color);
+    background: var(--bg-tab-inactive);  /* Dark inactive tabs */
+    border: 1px solid var(--border-color);
+    border-bottom: none;
     color: var(--text-secondary);
-    padding:4px 10px;
-    border-radius:4px;
-    font-size:0.75rem;
-    cursor:pointer;
-    line-height:1.2;
-    transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    padding: 6px 12px;
+    border-radius: 6px 6px 0 0;
+    font-size: 0.75rem;
+    cursor: pointer;
+    line-height: 1.2;
+    transition: background 0.2s, color 0.2s, transform 0.1s ease;
+    position: relative;
+    margin-bottom: -2px;
 }
-.instrument-tab:hover { background: var(--hover-color); color: var(--text-primary); }
-.instrument-tab.active { background: var(--bg-primary); color: var(--text-primary); box-shadow:0 0 0 1px var(--border-color) inset; }
+.instrument-tab:hover { 
+    background: var(--bg-secondary); 
+    color: var(--text-primary); 
+    transform: translateY(-1px);
+}
+.instrument-tab.active { 
+    background: var(--bg-tertiary);  /* Lighter background for active tab */
+    color: var(--text-primary); 
+    border-color: var(--border-color-light);
+    border-bottom: 2px solid var(--bg-tertiary);
+    z-index: 1;
+    font-weight: 500;
+}
 
-.instrument-tree-wrapper { display:none; margin-bottom:14px; }
+.instrument-tree-wrapper { 
+    display:none; 
+    margin-bottom:14px; 
+    background: var(--bg-tertiary);  /* Match active tab background */
+    border: 1px solid var(--border-color-light);
+    border-top: none;
+    padding: 8px;
+}
 .instrument-tree-wrapper:first-of-type { display:block; }
 .instrument-tree-wrapper .run-progress { margin:4px 0 6px 0; }
 

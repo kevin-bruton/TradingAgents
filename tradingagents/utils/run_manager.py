@@ -31,7 +31,7 @@ class RunManager:
         with self._lock:
             active_in_progress = sum(1 for r in self._runs.values() if r["status"] in ("pending", "in_progress"))
             if active_in_progress >= self._max_parallel:
-                raise RuntimeError("Maximum parallel run limit reached")
+                raise RuntimeError(f"Maximum parallel run limit reached. Max: {self._max_parallel}; Already active: {active_in_progress}")
             run_id = generate_run_id(ticker)
             now = time.time()
             self._runs[run_id] = {
