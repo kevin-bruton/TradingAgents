@@ -714,3 +714,58 @@ pre.message-content {
 /* Placeholder text in right panel */
 #right-panel .placeholder { opacity:0.6; font-size:0.9rem; }
 
+/* Modal dialog styles */
+#log-filter-modal {
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    max-width: 400px;
+    width: 90%;
+}
+
+#log-filter-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(2px);
+}
+
+#log-filter-modal h3 {
+    color: var(--text-primary);
+    margin-top: 0;
+}
+
+/* Log display in right panel */
+.right-panel-logs {
+    background: var(--bg-secondary);
+    padding: 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border-color);
+}
+
+.log-line {
+    padding: 2px 0;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.log-line.sev-DEBUG { color: #888; }
+.log-line.sev-INFO { color: var(--text-primary); }
+.log-line.sev-WARN { color: #ffb74d; }
+.log-line.sev-ERROR { color: #f44336; }
+
+.log-filters-info {
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    margin-bottom: 10px;
+    font-size: 0.9em;
+    color: var(--text-secondary);
+}
+
+.log-filters-info strong {
+    color: var(--text-primary);
+}
+
+

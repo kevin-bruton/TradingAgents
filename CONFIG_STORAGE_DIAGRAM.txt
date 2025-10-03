@@ -45,7 +45,7 @@
        └─► Setup form submission handler
 
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                          USER CHANGES VALUE                               │
+│                          USER CHANGES VALUE                             │
 └─────────────────────────────────────────────────────────────────────────┘
 
 User changes any form field

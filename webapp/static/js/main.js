@@ -1,5 +1,6 @@
 import { connectWebSocket } from './websocket.js';
 import { ensureRunTab, activateRun, selectNode, toggleNodeInteractive } from './runs.js';
+import { openLogFilterModal, applyLogFilters, reloadRightPanelLogs } from './logs.js';
 import './config.js'; // side-effect: populates provider/model selects & form handler
 
 // Event delegation for tree interactions
@@ -12,6 +13,9 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('DOMContentLoaded', () => { connectWebSocket(); });
 
-// Expose a minimal surface for legacy inline handlers (if any remain)
+// Expose functions for legacy inline handlers
 window.connectWebSocket = connectWebSocket;
 window.selectNode = () => {}; // legacy no-op
+window.openLogFilterModal = openLogFilterModal;
+window.applyLogFilters = applyLogFilters;
+window.reloadRightPanelLogs = reloadRightPanelLogs;
