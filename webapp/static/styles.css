@@ -768,4 +768,92 @@ pre.message-content {
     color: var(--text-primary);
 }
 
+/* Position Configuration Styles */
+#position-config-container {
+    margin-top: 15px;
+    margin-bottom: 15px;
+}
+
+#position-config-container h4 {
+    margin-top: 15px;
+    margin-bottom: 10px;
+    font-size: 0.95rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 15px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.position-instrument-fieldset {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.position-instrument-header {
+    font-weight: 600;
+    font-size: 0.95em;
+    color: var(--accent-color);
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color-light);
+}
+
+.position-fields-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+}
+
+.position-field {
+    display: flex;
+    flex-direction: column;
+}
+
+.position-field label {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+.position-field input,
+.position-field select {
+    padding: 8px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-primary);
+    font-size: 0.9em;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.position-field input:focus,
+.position-field select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.2);
+}
+
+.position-field select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a0a0a0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6,9 12,15 18,9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    background-size: 14px;
+    padding-right: 30px;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+/* Responsive adjustments for smaller screens */
+@media (max-width: 768px) {
+    .position-fields-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
 

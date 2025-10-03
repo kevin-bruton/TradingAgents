@@ -1850,49 +1850,98 @@ async def start_multi(
     max_debate_rounds: int = Form(...),
     cost_per_trade: float = Form(...),
     analysis_date: str = Form(...),
-    position_status: str = Form("none"),
-    current_stop_loss: str | None = Form(None),
-    current_take_profit: str | None = Form(None)
+    instrument_positions: str | None = Form(None),  # JSON string with per-instrument positions
+    position_status: str = Form("none"),  # Legacy fallback
+    current_stop_loss: str | None = Form(None),  # Legacy fallback
+    current_take_profit: str | None = Form(None)  # Legacy fallback
 ):
     if not ENABLE_MULTI_RUN:
         raise HTTPException(status_code=400, detail="Multi-run feature disabled. Set ENABLE_MULTI_RUN=1 to enable.")
 
     symbols = _validate_tickers(company_symbols)
-    position_status = (position_status or "none").lower()
-    if position_status not in ("none", "long", "short"):
-        position_status = "none"
-
-    def _parse_level(val: str | None):
-        if val is None or val == "":
-            return None
+    
+    # Parse per-instrument position configurations
+    instrument_configs = {}
+    if instrument_positions:
         try:
-            f = float(val)
-            if f <= 0:
-                return None
-            return f
-        except ValueError:
-            return None
-
-    initial_stop_loss = _parse_level(current_stop_loss)
-    initial_take_profit = _parse_level(current_take_profit)
-    if position_status == "none":
-        initial_stop_loss = None
-        initial_take_profit = None
-
-    config_payload = {
-        "llm_provider": llm_provider,
-        "quick_think_llm": quick_think_llm,
-        "deep_think_llm": deep_think_llm,
-        "max_debate_rounds": max_debate_rounds,
-        "cost_per_trade": cost_per_trade,
-        "analysis_date": analysis_date,
-        "user_position": position_status,
-        "initial_stop_loss": initial_stop_loss,
-        "initial_take_profit": initial_take_profit
-    }
+            import json
+            instrument_configs = json.loads(instrument_positions)
+        except Exception as e:
+            print(f"[start-multi] Failed to parse instrument_positions: {e}")
+            instrument_configs = {}
+    
+    # Helper to parse position config for a symbol
+    def _get_instrument_config(symbol: str):
+        # Check if we have per-instrument config
+        if symbol in instrument_configs:
+            cfg = instrument_configs[symbol]
+            pos_status = (cfg.get("position", "none") or "none").lower()
+            if pos_status not in ("none", "long", "short"):
+                pos_status = "none"
+            
+            sl = cfg.get("stop_loss", 0)
+            tp = cfg.get("take_profit", 0)
+            
+            try:
+                sl = float(sl) if sl else 0
+                tp = float(tp) if tp else 0
+            except (ValueError, TypeError):
+                sl = 0
+                tp = 0
+            
+            # If position is none, ignore stop loss and take profit
+            if pos_status == "none":
+                sl = None
+                tp = None
+            else:
+                # Convert 0 values to None (no stop loss/take profit set)
+                sl = sl if sl > 0 else None
+                tp = tp if tp > 0 else None
+            
+            return pos_status, sl, tp
+        else:
+            # Fallback to legacy single-value parameters
+            pos_status = (position_status or "none").lower()
+            if pos_status not in ("none", "long", "short"):
+                pos_status = "none"
+            
+            def _parse_level(val: str | None):
+                if val is None or val == "":
+                    return None
+                try:
+                    f = float(val)
+                    if f <= 0:
+                        return None
+                    return f
+                except ValueError:
+                    return None
+            
+            sl = _parse_level(current_stop_loss)
+            tp = _parse_level(current_take_profit)
+            
+            if pos_status == "none":
+                sl = None
+                tp = None
+            
+            return pos_status, sl, tp
 
     run_records = []
     for sym in symbols:
+        # Get position config for this specific symbol
+        pos_status, initial_stop_loss, initial_take_profit = _get_instrument_config(sym)
+        
+        config_payload = {
+            "llm_provider": llm_provider,
+            "quick_think_llm": quick_think_llm,
+            "deep_think_llm": deep_think_llm,
+            "max_debate_rounds": max_debate_rounds,
+            "cost_per_trade": cost_per_trade,
+            "analysis_date": analysis_date,
+            "user_position": pos_status,
+            "initial_stop_loss": initial_stop_loss,
+            "initial_take_profit": initial_take_profit
+        }
+        
         try:
             run_id = run_manager.create_run(sym, results_path="<pending>")
         except RuntimeError as e:

@@ -13,9 +13,9 @@
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- KaTeX for math rendering -->
     <!-- KaTeX (SRI removed due to mismatch warning; consider pinning correct hashes later) -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"> -->
+    <!-- <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script> -->
+    <!-- <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script> -->
 </head>
 <body>
     <div id="main-content">
@@ -50,6 +50,16 @@
                     <input type="number" id="multi_cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
                     <label for="multi_analysis_date">Analysis Date:</label>
                     <input type="date" id="multi_analysis_date" name="analysis_date" required>
+                    
+                    <!-- Position Configuration Section -->
+                    <div id="position-config-container">
+                        <h4 style="margin-top:15px; margin-bottom:10px; font-size:0.95rem; border-top:1px solid #e0e0e0; padding-top:15px;">Position Configuration</h4>
+                        <p style="font-size:0.85rem; color:#666; margin-bottom:12px;">Configure existing positions for each instrument. Leave stop loss and take profit at 0 if not set.</p>
+                        <div id="position-instruments-list">
+                            <!-- Dynamic position fields will be inserted here by JavaScript -->
+                        </div>
+                    </div>
+                    
                     <button type="submit">Start Multi-Run</button>
                 </form>
             </div>

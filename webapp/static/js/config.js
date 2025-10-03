@@ -166,6 +166,11 @@ function initializeConfigFields() {
     }
     symbolsInput.addEventListener('change', () => {
       updateConfigValue('company_symbols', symbolsInput.value);
+      updatePositionFields(); // Regenerate position fields when symbols change
+    });
+    // Also trigger on input to update position fields dynamically
+    symbolsInput.addEventListener('input', () => {
+      updatePositionFields();
     });
   }
 
@@ -201,6 +206,108 @@ function initializeConfigFields() {
       updateConfigValue('analysis_date', dateInput.value);
     });
   }
+  
+  // Initialize position fields for current symbols
+  updatePositionFields();
+}
+
+// Generate per-instrument position configuration fields
+function updatePositionFields() {
+  const symbolsInput = document.getElementById('multi_company_symbols');
+  const container = document.getElementById('position-instruments-list');
+  if (!symbolsInput || !container) return;
+  
+  const symbolsStr = symbolsInput.value.trim();
+  if (!symbolsStr) {
+    container.innerHTML = '<p style="font-size:0.85rem; color:#999; font-style:italic;">Enter company symbols above to configure positions.</p>';
+    return;
+  }
+  
+  const symbols = symbolsStr.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+  if (symbols.length === 0) {
+    container.innerHTML = '<p style="font-size:0.85rem; color:#999; font-style:italic;">Enter company symbols above to configure positions.</p>';
+    return;
+  }
+  
+  // Load saved position configurations
+  const savedPositions = getConfigValue('instrument_positions', {});
+  
+  container.innerHTML = '';
+  symbols.forEach((symbol, idx) => {
+    const savedPos = savedPositions[symbol] || { position: 'none', stop_loss: '0', take_profit: '0' };
+    
+    const fieldset = document.createElement('div');
+    fieldset.className = 'position-instrument-fieldset';
+    fieldset.innerHTML = `
+      <div class="position-instrument-header">${symbol}</div>
+      <div class="position-fields-grid">
+        <div class="position-field">
+          <label for="pos_${idx}_status">Position:</label>
+          <select id="pos_${idx}_status" name="position_status_${symbol}" data-symbol="${symbol}" data-field="position">
+            <option value="none" ${savedPos.position === 'none' ? 'selected' : ''}>None</option>
+            <option value="long" ${savedPos.position === 'long' ? 'selected' : ''}>Long</option>
+            <option value="short" ${savedPos.position === 'short' ? 'selected' : ''}>Short</option>
+          </select>
+        </div>
+        <div class="position-field">
+          <label for="pos_${idx}_sl">Stop Loss ($):</label>
+          <input type="number" id="pos_${idx}_sl" name="stop_loss_${symbol}" value="${savedPos.stop_loss}" min="0" step="0.01" data-symbol="${symbol}" data-field="stop_loss">
+        </div>
+        <div class="position-field">
+          <label for="pos_${idx}_tp">Take Profit ($):</label>
+          <input type="number" id="pos_${idx}_tp" name="take_profit_${symbol}" value="${savedPos.take_profit}" min="0" step="0.01" data-symbol="${symbol}" data-field="take_profit">
+        </div>
+      </div>
+    `;
+    container.appendChild(fieldset);
+    
+    // Add event listeners to save changes
+    const posSelect = fieldset.querySelector(`#pos_${idx}_status`);
+    const slInput = fieldset.querySelector(`#pos_${idx}_sl`);
+    const tpInput = fieldset.querySelector(`#pos_${idx}_tp`);
+    
+    [posSelect, slInput, tpInput].forEach(el => {
+      el.addEventListener('change', () => {
+        saveInstrumentPosition(symbol, {
+          position: posSelect.value,
+          stop_loss: slInput.value,
+          take_profit: tpInput.value
+        });
+      });
+    });
+  });
+}
+
+// Save position configuration for a specific instrument
+function saveInstrumentPosition(symbol, config) {
+  const savedPositions = getConfigValue('instrument_positions', {});
+  savedPositions[symbol] = config;
+  updateConfigValue('instrument_positions', savedPositions);
+}
+
+// Get all instrument position configurations
+function getAllInstrumentPositions() {
+  const symbolsInput = document.getElementById('multi_company_symbols');
+  if (!symbolsInput) return {};
+  
+  const symbols = symbolsInput.value.split(',').map(s => s.trim().toUpperCase()).filter(s => s);
+  const positions = {};
+  
+  symbols.forEach(symbol => {
+    const posSelect = document.querySelector(`select[name="position_status_${symbol}"]`);
+    const slInput = document.querySelector(`input[name="stop_loss_${symbol}"]`);
+    const tpInput = document.querySelector(`input[name="take_profit_${symbol}"]`);
+    
+    if (posSelect && slInput && tpInput) {
+      positions[symbol] = {
+        position: posSelect.value,
+        stop_loss: parseFloat(slInput.value) || 0,
+        take_profit: parseFloat(tpInput.value) || 0
+      };
+    }
+  });
+  
+  return positions;
 }
 
 async function ensureExecutionTreeLoaded() {
@@ -227,6 +334,11 @@ export function initMultiRunForm() {
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const fd = new FormData(form);
+    
+    // Add per-instrument position configurations as JSON
+    const positions = getAllInstrumentPositions();
+    fd.append('instrument_positions', JSON.stringify(positions));
+    
     if (!window.wsConnected) connectWebSocket();
     try {
       const resp = await fetch('/start-multi', {method:'POST', body: fd});

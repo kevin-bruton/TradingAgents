@@ -6,7 +6,7 @@ export function renderContentForItem(itemId, raw) {
   const isReport = /_report$/.test(itemId);
   const isMessages = /_messages$/.test(itemId);
   if (isReport || isMessages || isLikelyMarkdown(raw)) {
-    try { return window.marked.parse(raw, { breaks: true }); } catch { return raw; }
+    try { return window.marked.parse(raw, { breaks: true, gfm: true }); } catch { return raw; }
   }
   return raw;
 }
