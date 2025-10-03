@@ -540,7 +540,7 @@ def update_execution_state(state: Dict[str, Any], run_id: str | None = None):
         "Risky Analyst": {"phase": "risk_analysis", "agent_id": "risky_analyst", "report_key": "risk_debate_state.risky_history", "report_name": "Risk Assessment (Aggressive)"},
         "Neutral Analyst": {"phase": "risk_analysis", "agent_id": "neutral_analyst", "report_key": "risk_debate_state.neutral_history", "report_name": "Risk Assessment (Neutral)"},
         "Safe Analyst": {"phase": "risk_analysis", "agent_id": "safe_analyst", "report_key": "risk_debate_state.safe_history", "report_name": "Risk Assessment (Conservative)"},
-        "Risk Judge": {"phase": "final_decision", "agent_id": "risk_judge", "report_key": "final_trade_decision", "report_name": "Portfolio Manager's Decision"},
+        "Portfolio Manager": {"phase": "final_decision", "agent_id": "portfolio_manager", "report_key": "final_trade_decision", "report_name": "Portfolio Manager's Decision"},
     }
 
     if ENABLE_MULTI_RUN and run_id:
@@ -907,7 +907,7 @@ def initialize_complete_execution_tree():
             "duration_ms": None,
             "content": "Final portfolio / trade decision synthesized from all prior phases",
             "children": [
-                create_agent_node("risk_judge", "🧠 Portfolio Manager")
+                create_agent_node("portfolio_manager", "🧠 Portfolio Manager")
             ]
         }
     ]
@@ -1384,7 +1384,7 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
                         elif cr.startswith("neutral"):
                             agent_name = "Neutral Analyst"
                         elif risk_state.get("judge_decision"):
-                            agent_name = "Risk Judge"
+                            agent_name = "Portfolio Manager"
                 if agent_name and text and not text.startswith(f"[{agent_name}]"):
                     text = f"[{agent_name}] {text}"
                 if text:
@@ -1585,7 +1585,7 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
-        # Attempt to extract agent name from traceback (LangGraph style: "During task with name 'Risk Judge'")
+        # Attempt to extract agent name from traceback (LangGraph style: "During task with name 'Portfolio Manager'")
         import re
         agent_name = None
         m = re.search(r"During task with name '([^']+)'", error_detail)
@@ -1605,7 +1605,7 @@ def run_trading_process(company_symbol: str, config: Dict[str, Any], run_id: str
             "Risky Analyst": "risky_analyst",
             "Neutral Analyst": "neutral_analyst",
             "Safe Analyst": "safe_analyst",
-            "Risk Judge": "risk_judge"
+            "Portfolio Manager": "portfolio_manager"
         }
         mapped_agent_id = name_to_id.get(agent_name) if agent_name else None
         if ENABLE_MULTI_RUN and run_id:

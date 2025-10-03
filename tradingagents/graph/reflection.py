@@ -116,6 +116,6 @@ Adhere strictly to these instructions, and ensure your output is detailed, accur
         judge_decision = current_state["risk_debate_state"]["judge_decision"]
 
         result = self._reflect_on_component(
-            "RISK JUDGE", judge_decision, situation, returns_losses
+            "PORTFOLIO MANAGER", judge_decision, situation, returns_losses
         )
         risk_manager_memory.add_situations([(situation, result)])

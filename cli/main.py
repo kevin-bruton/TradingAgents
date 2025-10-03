@@ -950,7 +950,7 @@ def run_analysis():
                         elif risk_state.get("current_response", "").lower().startswith("neutral"):
                             agent_name = "Neutral Analyst"
                         elif risk_state.get("judge_decision"):
-                            agent_name = "Risk Judge"
+                            agent_name = "Portfolio Manager"
                 if agent_name and not content.startswith(f"[{agent_name}]"):
                     content = f"[{agent_name}] {content}"
 
@@ -1280,7 +1280,7 @@ def analyze_multi(
     analysis_date: str = typer.Option(datetime.date.today().isoformat(), help="Analysis date"),
     user_position: str = typer.Option("none", help="none|long|short"),
     cost_per_trade: float = typer.Option(0.0, help="Estimated cost per trade"),
-    analysts: str = typer.Option("market,social,news,fundamentals,bull,bear,research,trade,trader,risky,neutral,safe,risk_judge", help="Analyst identifiers list")
+    analysts: str = typer.Option("market,social,news,fundamentals,bull,bear,research,trade,trader,risky,neutral,safe,portfolio_manager", help="Analyst identifiers list")
 ):
     """Run multiple ticker analyses in parallel and produce a summary table.
 
