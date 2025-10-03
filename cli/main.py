@@ -185,7 +185,7 @@ def create_layout():
         Layout(name="footer", size=3),
     )
     layout["main"].split_column(
-        Layout(name="upper", ratio=3), Layout(name="analysis", ratio=5)
+        Layout(name="upper", ratio=5), Layout(name="analysis", ratio=5)
     )
     layout["upper"].split_row(
         Layout(name="progress", ratio=2), Layout(name="messages", ratio=3)
