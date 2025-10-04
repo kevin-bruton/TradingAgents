@@ -16,12 +16,14 @@ an embedding model hint tied to provider differences.
 """
 from __future__ import annotations
 import os
+import ssl
 from typing import Tuple, Optional
 
 try:
     from openai import OpenAI  # type: ignore
+    import httpx  # type: ignore
 except ImportError as e:  # pragma: no cover
-    raise ImportError("openai package not installed. Install with: pip install openai") from e
+    raise ImportError("openai or httpx package not installed. Install with: pip install openai httpx") from e
 
 # Default model hints per purpose (can be extended later)
 DEFAULT_EMBEDDING_MODEL = {
@@ -53,10 +55,17 @@ def _get_api_key(provider: str) -> Optional[str]:
     return None
 
 
-def build_openai_compatible_client(config: dict, purpose: str = "chat") -> Tuple[OpenAI, Optional[str]]:
+def build_openai_compatible_client(
+    config: dict, 
+    purpose: str = "chat",
+    timeout: Optional[int] = None,
+    max_retries: Optional[int] = None
+) -> Tuple[OpenAI, Optional[str]]:
     """Build and return an OpenAI-compatible client + optional model hint.
 
     purpose: one of {"chat", "embeddings"} to select default model hint.
+    timeout: optional timeout in seconds for API calls.
+    max_retries: optional number of retries for failed API calls.
     """
     provider = _detect_provider(config)
     backend_url = config.get("backend_url") or (
@@ -75,8 +84,41 @@ def build_openai_compatible_client(config: dict, purpose: str = "chat") -> Tuple
             "export OPENAI_API_KEY=your_key_here"
         )
 
-    # For Ollama we omit api_key (local server)
-    client = OpenAI(base_url=backend_url, api_key=api_key)
+    # Configure SSL/TLS for httpx (used by OpenAI SDK)
+    httpx_kwargs = {}
+    
+    # Check for custom certificate bundle
+    cert_bundle = config.get("ssl_cert_bundle") or os.getenv("REQUESTS_CA_BUNDLE") or os.getenv("CURL_CA_BUNDLE")
+    if cert_bundle and os.path.exists(cert_bundle):
+        # Create SSL context with custom certificate bundle
+        ssl_context = ssl.create_default_context(cafile=cert_bundle)
+        httpx_kwargs["verify"] = ssl_context
+    elif not config.get("ssl_verify", True):
+        # Disable SSL verification if explicitly set to false
+        httpx_kwargs["verify"] = False
+    
+    # Add timeout if specified
+    if timeout is not None:
+        httpx_kwargs["timeout"] = timeout
+    
+    # Create httpx client with SSL configuration
+    http_client = httpx.Client(**httpx_kwargs) if httpx_kwargs else None
+
+    # Build OpenAI client kwargs
+    client_kwargs = {
+        "base_url": backend_url,
+        "api_key": api_key
+    }
+    
+    # Add http_client if we configured SSL/timeout
+    if http_client is not None:
+        client_kwargs["http_client"] = http_client
+    
+    # Add max_retries if specified (helps with transient connection issues)
+    if max_retries is not None:
+        client_kwargs["max_retries"] = max_retries
+    
+    client = OpenAI(**client_kwargs)
 
     embedding_model = None
     if purpose == "embeddings":
