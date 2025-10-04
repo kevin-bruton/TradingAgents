@@ -1,36 +1,63 @@
+{#
+    Extended hierarchical render macro for 3-level display.
+    Levels:
+        1) Phase nodes (node_type == 'phase')
+        2) Agent role nodes (analyst/researcher/planner/trader/manager)
+        3) Leaf content: messages + report (synthetic children appended if absent)
+#}
 {% macro render_item(item) %}
-    <li class="process-item status-{{ item.status }}" id="item-{{ item.id }}">
+    {% set extra_classes = [] %}
+    {% if item.status == 'in_progress' %}
+        {% set _ = extra_classes.append('active-node') %}
+    {% endif %}
+    <li class="process-item status-{{ item.status }} {{ ' '.join(extra_classes) }}" id="item-{{ item.id }}" data-node-type="{{ item.node_type }}">
         <div class="item-header">
-            {% if item.children %}
-                <button class="toggle-btn" onclick="toggleNode(this)" aria-label="Toggle children">
-                    <span class="toggle-icon">▶</span>
-                </button>
+            {% set has_children = item.children or item.synthetic_children %}
+            {% if has_children %}
+                <button class="toggle-btn" data-action="toggle-node" aria-label="Toggle children"><span class="toggle-icon">▶</span></button>
             {% else %}
                 <span class="toggle-spacer"></span>
             {% endif %}
-            <span hx-get="/content/{{ item.id }}" hx-target="#right-panel" hx-swap="innerHTML" class="item-name clickable">
+            <span class="item-name clickable" data-item-id="{{ item.id }}" data-run-id="default">
                 <span class="status-icon" id="status-icon-{{ item.id }}">
                     {% if item.status == 'completed' %}✅
                     {% elif item.status == 'in_progress' %}⏳
                     {% elif item.status == 'error' %}❌
+                    {% elif item.status == 'canceled' %}⛔
                     {% else %}⏸️
                     {% endif %}
                 </span>
                 {{ item.name }}
+                <span class="meta small">
+                    {% if item.node_type %}<code class="nodetype">{{ item.node_type }}</code>{% endif %}
+                </span>
             </span>
         </div>
-        {% if item.children %}
+        {% if has_children %}
             <ul class="item-children collapsed" id="children-{{ item.id }}">
                 {% for child in item.children %}
                     {{ render_item(child) }}
                 {% endfor %}
+                {# Synthetic leaf nodes for messages/report if flagged #}
+                {% if item.synthetic_children %}
+                    {% for leaf in item.synthetic_children %}
+                        <li class="process-item leaf-node status-{{ leaf.status }}" id="item-{{ leaf.id }}" data-node-type="leaf">
+                            <div class="item-header">
+                                <span class="toggle-spacer"></span>
+                                <span class="item-name clickable" data-item-id="{{ leaf.id }}" data-run-id="default">
+                                    <span class="status-icon" id="status-icon-{{ leaf.id }}">
+                                        {% if leaf.status == 'completed' %}✅{% elif leaf.status == 'in_progress' %}⏳{% elif leaf.status == 'error' %}❌{% else %}⏸️{% endif %}
+                                    </span>
+                                    {{ leaf.name }}
+                                </span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                {% endif %}
             </ul>
         {% endif %}
     </li>
 {% endmacro %}
-
-<div id="overall-progress-bar" hx-swap-oob="true" style="width:{{ app_state.overall_progress }}%;"></div>
-<span id="overall-progress-text" hx-swap-oob="true">{{ app_state.overall_progress }}% ({{ app_state.overall_status }})</span>
 
 <h2>
     {% if app_state.company_symbol %}
@@ -39,13 +66,53 @@
         Execution Status
     {% endif %}
 </h2>
+<div id="instrument-tabs" class="instrument-tabs" role="tablist" aria-label="Instrument Executions">
+    {# Tabs populated dynamically by JS (multi-run) #}
+</div>
+<div id="instrument-trees" class="instrument-trees">
+    {% if tree %}
+        <ul class="execution-tree" id="execution-tree-default">
+            {% for item in tree %}
+                {{ render_item(item) }}
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="placeholder">No executions yet.</p>
+    {% endif %}
+</div>
 
-{% if tree %}
-    <ul class="execution-tree" id="execution-tree">
-        {% for item in tree %}
-            {{ render_item(item) }}
-        {% endfor %}
-    </ul>
-{% else %}
-    <p id="execution-tree">No process running. Start a new one from the configuration.</p>
-{% endif %}
+<div class="instruments-header" style="display:flex; align-items:center; justify-content:space-between; margin-top:0.5rem;">
+    <div>
+        <button type="button" class="small-btn" onclick="openLogFilterModal()">Filter Logs</button>
+    </div>
+</div>
+
+<dialog id="log-filter-modal">
+    <form method="dialog" class="log-filter-form" onsubmit="applyLogFilters(event)">
+        <h3 style="margin-top:0;">Log Filters</h3>
+        <label>Severity
+            <select id="global-log-severity">
+                <option value="INFO">INFO+</option>
+                <option value="DEBUG">DEBUG+</option>
+                <option value="WARN">WARN+</option>
+                <option value="ERROR">ERROR</option>
+            </select>
+        </label>
+        <label>Sources
+            <select id="global-log-sources" multiple size="5" style="min-width:140px;">
+                <option value="agent">agent</option>
+                <option value="decision">decision</option>
+                <option value="llm">llm</option>
+                <option value="tool">tool</option>
+                <option value="system">system</option>
+            </select>
+        </label>
+        <label>Search
+            <input type="text" id="global-log-query" placeholder="text..." />
+        </label>
+        <div style="display:flex; gap:8px; margin-top:10px;">
+            <button value="apply" class="primary">Apply</button>
+            <button value="cancel">Cancel</button>
+        </div>
+    </form>
+</dialog>

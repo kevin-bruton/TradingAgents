@@ -50,6 +50,12 @@ Deliverables:
 - A clear and actionable recommendation explicitly stating: maintain/close/flip position (or open new), any adjustments to stop-loss / take-profit (include both old and new if changed), and risk management rationale.
 - Detailed reasoning anchored in the debate and past reflections.
 
+IMPORTANT MARKDOWN FORMATTING GUIDELINES:
+- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values
+- For example, write 'approximately $250' or 'around $250' instead of '~$250'
+- If you need to use strikethrough, use double tildes (~~text~~) not single tilde
+- This ensures proper markdown rendering in the web interface
+
 ---
 
 **Analysts Debate History:**  

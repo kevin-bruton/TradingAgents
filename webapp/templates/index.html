@@ -9,430 +9,68 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/styles.css">
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- Lightweight Markdown renderer for report/messages content -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- KaTeX for math rendering -->
+    <!-- KaTeX (SRI removed due to mismatch warning; consider pinning correct hashes later) -->
+    <!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"> -->
+    <!-- <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script> -->
+    <!-- <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script> -->
 </head>
 <body>
-    <div id="overall-progress-container">
-        <div id="overall-progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-        <span id="overall-progress-text">0%</span>
-    </div>
     <div id="main-content">
-        <div id="left-panel">
-            <h2>Configuration</h2>
-            <div id="config-form">
-                <form hx-post="/start" hx-target="#left-panel" hx-swap="innerHTML" hx-indicator="#loading">
-                    <label for="company_symbol">Company Symbol:</label>
-                    <input type="text" id="company_symbol" name="company_symbol" value="AAPL" required>
-                    
-                    <label for="llm_provider">LLM Provider:</label>
-                    <select id="llm_provider" name="llm_provider" onchange="updateModelOptions()" required></select>
-                    
-                    <label for="quick_think_llm">Quick Think LLM:</label>
-                    <select id="quick_think_llm" name="quick_think_llm" required></select>
-                    
-                    <label for="deep_think_llm">Deep Think LLM:</label>
-                    <select id="deep_think_llm" name="deep_think_llm" required></select>
-                    
-                    <label for="max_debate_rounds">Max Debate Rounds:</label>
-                    <select id="max_debate_rounds" name="max_debate_rounds" required>
-                        <option value="1" selected>1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                    </select>
-                    
-                    <label for="cost_per_trade">Cost Per Trade ($):</label>
-                    <input type="number" id="cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
-                    
-                    <label for="analysis_date">Analysis Date:</label>
-                    <input type="date" id="analysis_date" name="analysis_date" value="{{ default_date }}" required>
-
-                    <fieldset style="margin-top:1rem; border:1px solid #444; padding:0.75rem;">
-                        <legend>Current Position (Optional)</legend>
-                        <label for="position_status">Position Status:</label>
-                        <select id="position_status" name="position_status" onchange="togglePositionFields()">
-                            <option value="none" selected>No Open Position</option>
-                            <option value="long">Long Position</option>
-                            <option value="short">Short Position</option>
-                        </select>
-                        <div id="position-details" style="display:none; margin-top:0.5rem;">
-                            <label for="current_stop_loss">Existing Stop Loss:</label>
-                            <input type="number" step="0.01" min="0" id="current_stop_loss" name="current_stop_loss" placeholder="e.g. 150.25">
-                            <label for="current_take_profit">Existing Take Profit:</label>
-                            <input type="number" step="0.01" min="0" id="current_take_profit" name="current_take_profit" placeholder="e.g. 180.00">
-                            <small>If left blank, no current levels will be assumed. New levels may be suggested.</small>
+    <div id="left-panel" class="layout-left">
+            <div id="config-header" class="config-header">
+                <h2 style="display:inline-block; margin:0;">Trading Agents</h2>
+            </div>
+            <div id="config-form" class="config-open">
+                <h3 style="margin-top:0;">Multi-Run Configuration</h3>
+                <form id="multi-run-form">
+                    <label for="multi_company_symbols">Company Symbols (CSV):</label>
+                    <input type="text" id="multi_company_symbols" name="company_symbols" placeholder="AAPL,MSFT,NVDA" value="AAPL,MSFT" required>
+                    <div class="two-col" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div>
+                            <label for="multi_llm_provider">LLM Provider:</label>
+                            <select id="multi_llm_provider" name="llm_provider"></select>
                         </div>
-                    </fieldset>
+                        <div>
+                            <label for="multi_max_debate_rounds">Max Debate Rounds:</label>
+                            <select id="multi_max_debate_rounds" name="max_debate_rounds">
+                                <option value="1" selected>1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                            </select>
+                        </div>
+                    </div>
+                    <label for="multi_quick_think_llm">Quick Think LLM:</label>
+                    <select id="multi_quick_think_llm" name="quick_think_llm"></select>
+                    <label for="multi_deep_think_llm">Deep Think LLM:</label>
+                    <select id="multi_deep_think_llm" name="deep_think_llm"></select>
+                    <label for="multi_cost_per_trade">Cost Per Trade ($):</label>
+                    <input type="number" id="multi_cost_per_trade" name="cost_per_trade" value="2.0" step="0.1" min="0" required>
+                    <label for="multi_analysis_date">Analysis Date:</label>
+                    <input type="date" id="multi_analysis_date" name="analysis_date" required>
                     
-                    <button type="submit">Start Process</button>
-                    <div id="loading" class="htmx-indicator">Starting process...</div>
+                    <!-- Position Configuration Section -->
+                    <div id="position-config-container">
+                        <h4 style="margin-top:15px; margin-bottom:10px; font-size:0.95rem; border-top:1px solid #e0e0e0; padding-top:15px;">Position Configuration</h4>
+                        <p style="font-size:0.85rem; color:#666; margin-bottom:12px;">Configure existing positions for each instrument. Leave stop loss and take profit at 0 if not set.</p>
+                        <div id="position-instruments-list">
+                            <!-- Dynamic position fields will be inserted here by JavaScript -->
+                        </div>
+                    </div>
+                    
+                    <button type="submit">Start Multi-Run</button>
                 </form>
             </div>
+                        <div id="execution-tree-container" data-empty="true">
+                            <p class="placeholder" style="margin:0; opacity:0.6; font-size:0.85rem;">No executions yet. Start a multi-run to see progress.</p>
+                        </div>
         </div>
-        <div id="right-panel">
-            <p>Welcome! Please set your configuration and start the process.</p>
-            <p>Enter a company symbol (e.g., AAPL, MSFT, GOOGL) and click "Start Process" to begin the trading analysis.</p>
+        <div id="right-panel" class="content-panel">
+            <div class="placeholder"><p>Select a phase, agent, messages, or report to view details.</p></div>
         </div>
-    </div>
-    
-    <script>
-        // =============================
-        // Real-time WebSocket Handling
-        // =============================
-        let ws = null;
-        let wsConnected = false;
-        let manualPollingFallback = false; // set true if websocket fails
-        let reconnectAttempts = 0;
-        const maxReconnectDelay = 15000;
-
-        function websocketUrl() {
-            const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-            return proto + '://' + window.location.host + '/ws';
-        }
-
-        function connectWebSocket() {
-            try {
-                ws = new WebSocket(websocketUrl());
-            } catch (e) {
-                console.warn('[ws] construction failed', e);
-                enablePollingFallback();
-                return;
-            }
-
-            ws.addEventListener('open', () => {
-                wsConnected = true;
-                reconnectAttempts = 0;
-                console.debug('[ws] connected');
-                // Stop polling if running
-                stopTargetedUpdates();
-            });
-
-            ws.addEventListener('close', () => {
-                wsConnected = false;
-                console.debug('[ws] closed');
-                if (!manualPollingFallback) scheduleReconnect();
-                else startTargetedUpdates();
-            });
-
-            ws.addEventListener('error', (err) => {
-                console.warn('[ws] error', err);
-            });
-
-            ws.addEventListener('message', (event) => {
-                let data;
-                try { data = JSON.parse(event.data); } catch { return; }
-                if (data.type === 'init') {
-                    // Replace left panel execution tree HTML from snapshot
-                    if (data.execution_tree_html) {
-                        const parser = new DOMParser();
-                        const doc = parser.parseFromString(data.execution_tree_html, 'text/html');
-                        const newTree = doc.querySelector('#execution-tree')?.parentElement; // container has other elems
-                        if (newTree) {
-                            // We only want the execution tree + progress bar content from the snapshot
-                            const leftPanel = document.getElementById('left-panel');
-                            if (leftPanel) {
-                                // Preserve configuration form while updating status section
-                                // So we extract only the <ul class="execution-tree"> element and progress bars
-                                const existingTree = leftPanel.querySelector('.execution-tree');
-                                const incomingTree = doc.querySelector('.execution-tree');
-                                if (existingTree && incomingTree) {
-                                    existingTree.replaceWith(incomingTree);
-                                } else if (!existingTree && incomingTree) {
-                                    leftPanel.appendChild(incomingTree);
-                                }
-                                // Progress elements out-of-band updates - just set directly
-                                if (typeof data.overall_progress === 'number') updateOverallProgress(data.overall_progress, data.overall_status);
-                            }
-                        }
-                    }
-                } else if (data.type === 'status_update') {
-                    applyStatusUpdate(data);
-                } else if (data.type === 'content') {
-                    // Content panel update
-                    const right = document.getElementById('right-panel');
-                    if (right) {
-                        right.innerHTML = data.html;
-                    }
-                }
-            });
-        }
-
-        function scheduleReconnect() {
-            reconnectAttempts += 1;
-            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), maxReconnectDelay);
-            console.debug('[ws] reconnect in', delay);
-            setTimeout(() => {
-                if (!wsConnected) connectWebSocket();
-            }, delay);
-            // Meanwhile start fallback polling after a short grace
-            if (!manualPollingFallback) {
-                setTimeout(() => {
-                    if (!wsConnected) enablePollingFallback();
-                }, 2500);
-            }
-        }
-
-        function enablePollingFallback() {
-            if (manualPollingFallback) return; // already enabled
-            manualPollingFallback = true;
-            console.debug('[fallback] enabling polling');
-            startTargetedUpdates();
-        }
-
-        function applyStatusUpdate(data) {
-            if (!data) return;
-            updateOverallProgress(data.overall_progress, data.overall_status);
-            const updates = data.status_updates || {};
-            for (const [itemId, statusInfo] of Object.entries(updates)) {
-                const statusIcon = document.querySelector(`[hx-get="/content/${itemId}"] .status-icon`);
-                if (statusIcon && statusIcon.textContent !== statusInfo.status_icon) {
-                    statusIcon.textContent = statusInfo.status_icon;
-                    const processItem = statusIcon.closest('.process-item');
-                    if (processItem) {
-                        processItem.classList.remove('status-pending', 'status-in_progress', 'status-completed', 'status-error');
-                        processItem.classList.add('status-' + statusInfo.status);
-                    }
-                }
-            }
-        }
-
-        function updateOverallProgress(progress, status) {
-            const progressBar = document.getElementById('overall-progress-bar');
-            const progressText = document.getElementById('overall-progress-text');
-            if (progressBar && typeof progress === 'number') progressBar.style.width = progress + '%';
-            if (progressText) progressText.textContent = progress + '% (' + status + ')';
-        }
-        // Populated dynamically from /config/providers
-        let modelOptions = {};
-        let providerDisplayNames = {};
-
-        async function fetchProviderConfig() {
-            try {
-                const resp = await fetch('/config/providers');
-                const data = await resp.json();
-                const providers = data.providers || [];
-                const providerSelect = document.getElementById('llm_provider');
-                providerSelect.innerHTML = '';
-                providers.forEach(p => {
-                    providerDisplayNames[p.key] = p.display_name || p.key;
-                    modelOptions[p.key] = p.models || {};
-                    const opt = document.createElement('option');
-                    opt.value = p.key;
-                    opt.textContent = p.display_name || p.key;
-                    if (p.key === 'openrouter') opt.selected = true; // keep previous default
-                    providerSelect.appendChild(opt);
-                });
-                updateModelOptions();
-            } catch (e) {
-                console.error('Failed to load provider configuration', e);
-            }
-        }
-
-        function updateModelOptions() {
-            const provider = document.getElementById('llm_provider').value;
-            const quickSelect = document.getElementById('quick_think_llm');
-            const deepSelect = document.getElementById('deep_think_llm');
-            
-            // Clear existing options
-            quickSelect.innerHTML = '';
-            deepSelect.innerHTML = '';
-            
-            // Populate quick think options
-            const quickList = (modelOptions[provider] && modelOptions[provider].quick) || [];
-            quickList.forEach(m => {
-                const option = document.createElement('option');
-                option.value = m.id || m.value || m; // support both shapes
-                option.textContent = m.name || m.text || option.value;
-                quickSelect.appendChild(option);
-            });
-            
-            // Populate deep think options
-            const deepList = (modelOptions[provider] && modelOptions[provider].deep) || [];
-            deepList.forEach(m => {
-                const option = document.createElement('option');
-                option.value = m.id || m.value || m;
-                option.textContent = m.name || m.text || option.value;
-                deepSelect.appendChild(option);
-            });
-        }
-
-        function togglePositionFields() {
-            const status = document.getElementById('position_status').value;
-            const details = document.getElementById('position-details');
-            if (status === 'long' || status === 'short') {
-                details.style.display = 'block';
-            } else {
-                details.style.display = 'none';
-                document.getElementById('current_stop_loss').value = '';
-                document.getElementById('current_take_profit').value = '';
-            }
-        }
-
-        // Set current date as default for analysis_date
-        function setCurrentDate() {
-            const el = document.getElementById('analysis_date');
-            if (el && !el.value) { // only set if not already provided by server
-                const today = new Date();
-                const dateString = today.toISOString().split('T')[0];
-                el.value = dateString;
-            }
-        }
-
-    // Toggle node functionality for collapsible tree
-        function toggleNode(button) {
-            const li = button.closest('li.process-item');
-            const children = li ? li.querySelector(':scope > .item-children') : null;
-            if (!children) return;
-            const isExpanded = children.classList.contains('expanded');
-            if (isExpanded) {
-                children.classList.remove('expanded');
-                children.classList.add('collapsed');
-                button.classList.remove('expanded');
-                button.setAttribute('aria-expanded', 'false');
-            } else {
-                children.classList.remove('collapsed');
-                children.classList.add('expanded');
-                button.classList.add('expanded');
-                button.setAttribute('aria-expanded', 'true');
-            }
-    }
-
-    // Initial fetch of provider config
-    fetchProviderConfig();
-
-        // Save the current expansion state of all toggleable items
-        function saveExpansionState() {
-            const state = {};
-            const executionTree = document.querySelector('.execution-tree');
-            if (executionTree) {
-                const items = executionTree.querySelectorAll('.process-item');
-                items.forEach(item => {
-                    const children = item.querySelector('.item-children');
-                    const button = item.querySelector('.toggle-btn');
-                    if (children && button) {
-                        const itemId = getItemId(item);
-                        if (itemId) {
-                            state[itemId] = children.classList.contains('expanded');
-                        }
-                    }
-                });
-            }
-            return state;
-        }
-
-        // Restore the expansion state after content update
-        function restoreExpansionState(savedState) {
-            if (!savedState) return;
-            
-            const executionTree = document.querySelector('.execution-tree');
-            if (executionTree) {
-                const items = executionTree.querySelectorAll('.process-item');
-                items.forEach(item => {
-                    const children = item.querySelector('.item-children');
-                    const button = item.querySelector('.toggle-btn');
-                    if (children && button) {
-                        const itemId = getItemId(item);
-                        if (itemId && savedState.hasOwnProperty(itemId)) {
-                            if (savedState[itemId]) {
-                                // Expand
-                                children.classList.remove('collapsed');
-                                children.classList.add('expanded');
-                                button.classList.add('expanded');
-                            } else {
-                                // Collapse
-                                children.classList.remove('expanded');
-                                children.classList.add('collapsed');
-                                button.classList.remove('expanded');
-                            }
-                        }
-                    }
-                });
-            }
-        }
-
-        // Get item ID from the clickable span
-        function getItemId(processItem) {
-            const clickableSpan = processItem.querySelector('.item-name.clickable');
-            if (clickableSpan) {
-                const hxGet = clickableSpan.getAttribute('hx-get');
-                if (hxGet) {
-                    const match = hxGet.match(/\/content\/(.+)$/);
-                    return match ? match[1] : null;
-                }
-            }
-            return null;
-        }
-
-        // Handle HTMX before request to save state
-        document.addEventListener('htmx:beforeSwap', function(event) {
-                if (event.target.id === 'left-panel') {
-                window.savedExpansionState = saveExpansionState();
-            }
-        });
-
-        // Handle HTMX after settle to restore state
-            document.addEventListener('htmx:afterSettle', function(event) {
-                if (event.target.id === 'left-panel' && window.savedExpansionState) {
-                restoreExpansionState(window.savedExpansionState);
-            }
-        });
-
-        // Targeted status updates to prevent flickering
-        function updateStatusIndicators() {
-            // Fallback polling (legacy)
-            if (wsConnected) return; // skip if websocket active
-            fetch('/status-updates')
-              .then(r => r.json())
-              .then(data => applyStatusUpdate({
-                status_updates: data.status_updates,
-                overall_progress: data.overall_progress,
-                overall_status: data.overall_status
-              }))
-              .catch(err => console.log('Status update failed:', err));
-        }
-
-        // Start targeted updates when execution tree is present
-        function startTargetedUpdates() {
-            const tree = document.querySelector('.execution-tree');
-            if (!tree) return;
-            if (!window.statusUpdateInterval) {
-                console.debug('[status] starting interval');
-                window.statusUpdateInterval = setInterval(updateStatusIndicators, 2000);
-            }
-        }
-
-        // Stop targeted updates
-        function stopTargetedUpdates() {
-            if (window.statusUpdateInterval) {
-                clearInterval(window.statusUpdateInterval);
-                window.statusUpdateInterval = null;
-            }
-        }
-
-        // Initialize the page
-        document.addEventListener('DOMContentLoaded', function() {
-            setCurrentDate();
-            updateModelOptions(); // Set initial model options for OpenRouter
-            
-            // Try to establish websocket connection
-            connectWebSocket();
-            // Start polling only if websocket not yet connected after short delay
-            setTimeout(() => { if (!wsConnected) startTargetedUpdates(); }, 1200);
-        });
-
-        // Handle when new content is loaded (like when starting a process)
-        document.addEventListener('htmx:afterSettle', function(event) {
-                if (event.target.id === 'left-panel') {
-                if (window.savedExpansionState) {
-                    restoreExpansionState(window.savedExpansionState);
-                }
-                // If websocket connected, no need to restart polling
-                if (!wsConnected) {
-                    stopTargetedUpdates();
-                    startTargetedUpdates();
-                }
-            }
-        });
-    </script>
+    <!-- Runtime logic now fully in /static/js/*.js modules -->
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

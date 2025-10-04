@@ -1,0 +1,151 @@
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Configuration Storage Flow                           │
+└─────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          PAGE LOAD SEQUENCE                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+1. DOMContentLoaded Event
+   │
+   ├─► initializeConfigFields()
+   │   │
+   │   ├─► Load 'trading_agents_config' from localStorage
+   │   │   (Single JSON object with all settings)
+   │   │
+   │   ├─► Restore Form Values:
+   │   │   ├─ Company Symbols ✓
+   │   │   ├─ Max Debate Rounds ✓
+   │   │   └─ Cost Per Trade ✓
+   │   │
+   │   └─► Attach Change Listeners
+   │       (Auto-save on any change)
+   │
+   ├─► fetchProviderConfig()
+   │   │
+   │   ├─► Fetch /config/providers (from server)
+   │   │
+   │   ├─► Populate Provider Dropdown
+   │   │
+   │   ├─► Restore Saved Provider ✓
+   │   │   (If valid, else use first provider)
+   │   │
+   │   └─► updateModelOptions()
+   │       │
+   │       ├─► Populate Model Dropdowns
+   │       │   ├─ Quick Think Models
+   │       │   └─ Deep Think Models
+   │       │
+   │       ├─► Restore Saved Models ✓
+   │       │   (If valid for current provider)
+   │       │
+   │       └─► Attach Change Listeners
+   │
+   └─► initMultiRunForm()
+       └─► Setup form submission handler
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          USER CHANGES VALUE                             │
+└─────────────────────────────────────────────────────────────────────────┘
+
+User changes any form field
+   │
+   ├─► Change Event Fires
+   │
+   └─► updateConfigValue(key, value)
+       │
+       ├─► Load current config from localStorage
+       │
+       ├─► Update specific key
+       │
+       └─► Save entire config back to localStorage
+           (Atomic operation)
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      LOCALSTORAGE STRUCTURE                               │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Key: 'trading_agents_config'
+Value: {
+  "llm_provider": "openai",           ← Provider selection
+  "quick_think_llm": "gpt-4o-mini",   ← Quick model
+  "deep_think_llm": "gpt-4o",         ← Deep model
+  "company_symbols": "AAPL,MSFT",     ← Stock symbols
+  "max_debate_rounds": "2",           ← Debate rounds
+  "cost_per_trade": "2.5",            ← Trade cost
+  "analysis_date": "2025-10-02"       ← Analysis date (not restored)
+}
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          VALIDATION FLOW                                  │
+└─────────────────────────────────────────────────────────────────────────┘
+
+For Provider/Model Selections:
+
+  Saved Value Exists?
+     │
+     ├─ NO ──► Use Default (first available option)
+     │
+     └─ YES ──► Is it still valid? (exists in current options)
+                  │
+                  ├─ NO ──► Use Default
+                  │
+                  └─ YES ──► Restore Saved Value ✓
+
+For Other Fields:
+
+  Saved Value Exists?
+     │
+     ├─ NO ──► Use HTML default value
+     │
+     └─ YES ──► Restore Saved Value ✓
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                       ERROR HANDLING                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+localStorage.getItem() fails
+   │
+   └─► Try-Catch ──► Log warning ──► Return empty object {}
+                                     (App continues normally)
+
+localStorage.setItem() fails
+   │
+   └─► Try-Catch ──► Log warning ──► Continue
+                                     (Changes not saved, but app works)
+
+JSON.parse() fails
+   │
+   └─► Try-Catch ──► Log warning ──► Return empty object {}
+                                     (Use defaults)
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      TESTING CHECKLIST                                    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+□ Set all fields to non-default values
+□ Reload page → All values restored (except date)
+□ Change provider → Models update correctly
+□ Change models → New selections persist
+□ Clear localStorage → Defaults restored
+□ Disable localStorage → App still works (no errors)
+□ Invalid saved provider → Falls back to default
+□ Invalid saved model → Falls back to default
+
+┌─────────────────────────────────────────────────────────────────────────┐
+│                      DEVELOPER TOOLS                                      │
+└─────────────────────────────────────────────────────────────────────────┘
+
+View Config:
+  JSON.parse(localStorage.getItem('trading_agents_config'))
+
+Clear Config:
+  localStorage.removeItem('trading_agents_config')
+  // OR
+  import { clearAllConfig } from './config.js';
+  clearAllConfig();
+
+Modify Config:
+  let c = JSON.parse(localStorage.getItem('trading_agents_config') || '{}');
+  c.cost_per_trade = '5.0';
+  localStorage.setItem('trading_agents_config', JSON.stringify(c));

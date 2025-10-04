@@ -30,7 +30,12 @@ def create_fundamentals_analyst(llm, toolkit):
             "Do not simply state the trends are mixed. "
             "Provide detailed and finegrained analysis and insights that may help traders make decisions. "
             "Make sure to append a Markdown table at the end of the report to organize key points in the report, "
-            "organized and easy to read.",
+            "organized and easy to read. "
+            "\n\nIMPORTANT MARKDOWN FORMATTING GUIDELINES:\n"
+            "- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values\n"
+            "- For example, write 'approximately $250' or 'around $250' instead of '~$250'\n"
+            "- If you need to use strikethrough, use double tildes (~~text~~) not single tilde\n"
+            "- This ensures proper markdown rendering in the web interface",
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -74,8 +79,16 @@ def create_fundamentals_analyst(llm, toolkit):
         if getattr(result, 'tool_calls', []) == []:
             report = getattr(result, 'content', '')
 
+        msg = result
+        try:
+            from langchain_core.messages import AIMessage
+            if not isinstance(result, AIMessage):
+                msg = AIMessage(content=getattr(result, 'content', str(result)))
+        except Exception:
+            msg = {"type": "ai", "content": getattr(result, 'content', str(result))}
+
         return {
-            "messages": [result],
+            "messages": [msg],
             "fundamentals_report": report,
         }
 

@@ -81,8 +81,8 @@ providers:
     base_url: https://openrouter.ai/api/v1
     models:
       quick:
-        - id: x-ai/grok-4-fast:free
-          name: "xAI: Grok 4 Fast (free)"
+        - id: meta-llama/llama-4-maverick:free
+          name: "Meta: Llama 4 Maverick (free)"
         - id: deepseek/deepseek-chat-v3.1:free
           name: "DeepSeek: DeepSeek V3.1 (free)"
         - id: z-ai/glm-4-32b
@@ -94,6 +94,8 @@ providers:
         - id: google/gemini-2.0-flash-exp:free
           name: "Google: Gemini 2.0 Flash (free)"
       deep:
+        - id: deepseek/deepseek-r1:free
+          name: "DeepSeek: R1 (free)"
         - id: qwen/qwen3-235b-a22b:free
           name: "Qwen: Qwen3 235B A22B (free)"
         - id: openai/gpt-oss-120b:free

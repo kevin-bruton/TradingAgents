@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration Storage Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .danger {
+            background-color: #dc3545;
+        }
+        .danger:hover {
+            background-color: #c82333;
+        }
+        .success {
+            background-color: #28a745;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Trading Agents Configuration Storage Test</h1>
+    
+    <div class="test-section">
+        <h2>Current Stored Configuration</h2>
+        <button onclick="displayConfig()">Refresh Display</button>
+        <pre id="configDisplay">Click "Refresh Display" to view current configuration</pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Operations</h2>
+        <button onclick="testSetValues()">Set Test Values</button>
+        <button onclick="testGetValues()">Get Values (Check Console)</button>
+        <button class="danger" onclick="clearConfig()">Clear All Configuration</button>
+        <div id="testStatus"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Manual Configuration Editor</h2>
+        <p>Edit the JSON below and click "Save Manual Changes":</p>
+        <textarea id="manualConfig" style="width: 100%; height: 200px; font-family: monospace;"></textarea>
+        <button class="success" onclick="saveManualConfig()">Save Manual Changes</button>
+        <button onclick="loadToEditor()">Load Current Config to Editor</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Instructions</h2>
+        <ol>
+            <li><strong>Set Test Values:</strong> Creates a sample configuration in localStorage</li>
+            <li><strong>Refresh Display:</strong> Shows the current stored configuration</li>
+            <li><strong>Get Values:</strong> Retrieves individual values and logs to console</li>
+            <li><strong>Clear All:</strong> Removes all configuration from localStorage</li>
+            <li><strong>Manual Editor:</strong> Edit JSON directly for advanced testing</li>
+        </ol>
+        <p><strong>Note:</strong> After any changes, reload the main webapp to see if values are properly restored.</p>
+    </div>
+
+    <script>
+        const CONFIG_STORAGE_KEY = 'trading_agents_config';
+
+        function displayConfig() {
+            const config = localStorage.getItem(CONFIG_STORAGE_KEY);
+            const display = document.getElementById('configDisplay');
+            if (config) {
+                try {
+                    const parsed = JSON.parse(config);
+                    display.textContent = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    display.textContent = 'Error parsing config: ' + e.message;
+                }
+            } else {
+                display.textContent = 'No configuration found in localStorage';
+            }
+        }
+
+        function testSetValues() {
+            const testConfig = {
+                llm_provider: "openai",
+                quick_think_llm: "gpt-4o-mini",
+                deep_think_llm: "gpt-4o",
+                company_symbols: "AAPL,GOOGL,MSFT",
+                max_debate_rounds: "3",
+                cost_per_trade: "3.5",
+                analysis_date: "2025-10-02"
+            };
+            
+            try {
+                localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(testConfig));
+                showStatus('Test values set successfully!', 'success');
+                displayConfig();
+            } catch (e) {
+                showStatus('Error setting test values: ' + e.message, 'error');
+            }
+        }
+
+        function testGetValues() {
+            try {
+                const config = localStorage.getItem(CONFIG_STORAGE_KEY);
+                if (config) {
+                    const parsed = JSON.parse(config);
+                    console.log('Current Configuration:', parsed);
+                    console.log('LLM Provider:', parsed.llm_provider);
+                    console.log('Quick Think LLM:', parsed.quick_think_llm);
+                    console.log('Deep Think LLM:', parsed.deep_think_llm);
+                    console.log('Company Symbols:', parsed.company_symbols);
+                    console.log('Max Debate Rounds:', parsed.max_debate_rounds);
+                    console.log('Cost Per Trade:', parsed.cost_per_trade);
+                    showStatus('Values logged to console (F12 to view)', 'success');
+                } else {
+                    showStatus('No configuration found', 'error');
+                }
+            } catch (e) {
+                showStatus('Error retrieving values: ' + e.message, 'error');
+            }
+        }
+
+        function clearConfig() {
+            if (confirm('Are you sure you want to clear all configuration?')) {
+                try {
+                    localStorage.removeItem(CONFIG_STORAGE_KEY);
+                    showStatus('Configuration cleared successfully!', 'success');
+                    displayConfig();
+                } catch (e) {
+                    showStatus('Error clearing configuration: ' + e.message, 'error');
+                }
+            }
+        }
+
+        function loadToEditor() {
+            const config = localStorage.getItem(CONFIG_STORAGE_KEY);
+            const editor = document.getElementById('manualConfig');
+            if (config) {
+                try {
+                    const parsed = JSON.parse(config);
+                    editor.value = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    editor.value = 'Error loading config: ' + e.message;
+                }
+            } else {
+                editor.value = '{\n  \n}';
+            }
+        }
+
+        function saveManualConfig() {
+            const editor = document.getElementById('manualConfig');
+            try {
+                const parsed = JSON.parse(editor.value);
+                localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(parsed));
+                showStatus('Configuration saved successfully!', 'success');
+                displayConfig();
+            } catch (e) {
+                showStatus('Error saving configuration: ' + e.message + '. Check JSON syntax.', 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            const status = document.getElementById('testStatus');
+            status.innerHTML = `<div class="status ${type}">${message}</div>`;
+            setTimeout(() => {
+                status.innerHTML = '';
+            }, 3000);
+        }
+
+        // Initial display
+        displayConfig();
+    </script>
+</body>
+</html>

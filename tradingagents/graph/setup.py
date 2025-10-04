@@ -129,7 +129,7 @@ class GraphSetup:
         workflow.add_node("Risky Analyst", risky_analyst)
         workflow.add_node("Neutral Analyst", neutral_analyst)
         workflow.add_node("Safe Analyst", safe_analyst)
-        workflow.add_node("Risk Judge", risk_manager_node)
+        workflow.add_node("Portfolio Manager", risk_manager_node)
 
         # Define edges
         # Start with the first analyst
@@ -182,7 +182,7 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Safe Analyst": "Safe Analyst",
-                "Risk Judge": "Risk Judge",
+                "Portfolio Manager": "Portfolio Manager",
             },
         )
         workflow.add_conditional_edges(
@@ -190,7 +190,7 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Neutral Analyst": "Neutral Analyst",
-                "Risk Judge": "Risk Judge",
+                "Portfolio Manager": "Portfolio Manager",
             },
         )
         workflow.add_conditional_edges(
@@ -198,11 +198,11 @@ class GraphSetup:
             self.conditional_logic.should_continue_risk_analysis,
             {
                 "Risky Analyst": "Risky Analyst",
-                "Risk Judge": "Risk Judge",
+                "Portfolio Manager": "Portfolio Manager",
             },
         )
 
-        workflow.add_edge("Risk Judge", END)
+        workflow.add_edge("Portfolio Manager", END)
 
         # Compile and return
         return workflow.compile()

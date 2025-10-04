@@ -45,7 +45,13 @@ def create_trader(llm, memory):
 - If the user has no open position, your recommendation can be to do nothing, open a long position, or open a short position.
 
 Based on your analysis, provide a specific recommendation. End with a firm decision and always conclude your response with 'FINAL TRANSACTION PROPOSAL: **YOUR_RECOMMENDATION**' to confirm your recommendation. Take into account that any transaction will incur a cost of {cost_per_trade}, so the potential profit of a transaction must be greater than this cost. Do not forget to utilize lessons from past decisions to learn from your mistakes. Here is some reflections from similar situations you traded in and the lessons learned: {past_memory_str}
-Your output should always be in markdown format.""",
+Your output should always be in markdown format.
+
+IMPORTANT MARKDOWN FORMATTING GUIDELINES:
+- Use 'approximately', 'around', or 'about' instead of the tilde symbol (~) when describing approximate values
+- For example, write 'approximately $250' or 'around $250' instead of '~$250'
+- If you need to use strikethrough, use double tildes (~~text~~) not single tilde
+- This ensures proper markdown rendering in the web interface""",
             },
             context,
         ]

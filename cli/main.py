@@ -15,6 +15,7 @@ from rich.live import Live
 from rich.table import Table
 from collections import deque
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from rich.tree import Tree
 from rich import box
 from rich.align import Align
@@ -184,7 +185,7 @@ def create_layout():
         Layout(name="footer", size=3),
     )
     layout["main"].split_column(
-        Layout(name="upper", ratio=3), Layout(name="analysis", ratio=5)
+        Layout(name="upper", ratio=5), Layout(name="analysis", ratio=5)
     )
     layout["upper"].split_row(
         Layout(name="progress", ratio=2), Layout(name="messages", ratio=3)
@@ -949,7 +950,7 @@ def run_analysis():
                         elif risk_state.get("current_response", "").lower().startswith("neutral"):
                             agent_name = "Neutral Analyst"
                         elif risk_state.get("judge_decision"):
-                            agent_name = "Risk Judge"
+                            agent_name = "Portfolio Manager"
                 if agent_name and not content.startswith(f"[{agent_name}]"):
                     content = f"[{agent_name}] {content}"
 
@@ -1200,3 +1201,146 @@ def analyze():
 
 if __name__ == "__main__":
     app()
+
+#############################################
+# Multi-Ticker Parallel Mode Implementation #
+#############################################
+
+def _run_single_ticker(ticker: str, base_selections: dict, config_overrides: dict):
+    """Non-interactive single ticker runner used by analyze-multi.
+    Returns (ticker, success_bool, final_decision, results_dir, error_message).
+    """
+    try:
+        # Build selections clone
+        selections = dict(base_selections)
+        selections['ticker'] = ticker
+
+        # Config
+        config = DEFAULT_CONFIG.copy()
+        config["max_debate_rounds"] = selections["research_depth"]
+        config["max_risk_discuss_rounds"] = selections["research_depth"]
+        config["quick_think_llm"] = selections["shallow_thinker"]
+        config["deep_think_llm"] = selections["deep_thinker"]
+        config["backend_url"] = selections["backend_url"]
+        config["llm_provider"] = selections["llm_provider"].lower()
+        config["user_position"] = selections["user_position"]
+        config["cost_per_trade"] = selections["cost_per_trade"]
+
+        graph = TradingAgentsGraph([analyst.value for analyst in selections["analysts"]], config=config, debug=False)
+
+        from tradingagents.utils.results import create_run_results_dirs
+        results_dir, report_dir, log_file = create_run_results_dirs(config["results_dir"], selections["ticker"], selections["analysis_date"])
+
+        # Minimal callback to persist key reports
+        def on_step(state: dict):
+            report_keys = [
+                "market_report", "sentiment_report", "news_report", "fundamentals_report",
+                "investment_plan", "trader_investment_plan", "final_trade_decision"
+            ]
+            for rk in report_keys:
+                content = state.get(rk)
+                if content:
+                    with open(report_dir / f"{rk}.md", 'w', encoding='utf-8') as f:
+                        f.write(str(content))
+
+        # Stream logger (messages only) for traceability
+        def on_stream(evt: dict):
+            msgs = evt.get('messages') or []
+            if msgs:
+                last = msgs[-1]
+                text = getattr(last, 'content', None)
+                if isinstance(text, list):
+                    text = ' '.join(str(x) for x in text)
+                if text:
+                    with open(log_file, 'a', encoding='utf-8') as lf:
+                        lf.write(text.replace('\n',' ') + '\n')
+
+        final_state, processed_signal = graph.propagate(
+            selections['ticker'],
+            trade_date=selections['analysis_date'],
+            user_position=selections['user_position'],
+            cost_per_trade=config.get('cost_per_trade', 0.0),
+            on_step_callback=on_step,
+            on_stream_event=on_stream,
+        )
+        decision = processed_signal
+        return ticker, True, decision, str(results_dir), None
+    except Exception as e:
+        return ticker, False, None, None, str(e)
+
+
+@app.command()
+def analyze_multi(
+    tickers: str = typer.Option(..., help="Comma-separated tickers e.g. AAPL,MSFT,NVDA"),
+    parallel: int = typer.Option(3, help="Max parallel analyses"),
+    research_depth: int = typer.Option(2, help="Debate rounds for both research and risk"),
+    llm_provider: str = typer.Option("openai", help="LLM provider key"),
+    shallow_thinker: str = typer.Option("gpt-4o-mini", help="Quick/cheap model"),
+    deep_thinker: str = typer.Option("gpt-4o", help="Deeper reasoning model"),
+    analysis_date: str = typer.Option(datetime.date.today().isoformat(), help="Analysis date"),
+    user_position: str = typer.Option("none", help="none|long|short"),
+    cost_per_trade: float = typer.Option(0.0, help="Estimated cost per trade"),
+    analysts: str = typer.Option("market,social,news,fundamentals,bull,bear,research,trade,trader,risky,neutral,safe,portfolio_manager", help="Analyst identifiers list")
+):
+    """Run multiple ticker analyses in parallel and produce a summary table.
+
+    Analyst identifiers correspond to enum values in cli.models.AnalystType (case-insensitive).
+    """
+    symbol_list = [s.strip().upper() for s in tickers.split(',') if s.strip()]
+    if not symbol_list:
+        console.print("[red]No tickers provided[/red]")
+        raise typer.Exit(code=1)
+
+    # Map analyst string list to AnalystType enums where possible
+    chosen_analysts = []
+    for token in [a.strip() for a in analysts.split(',') if a.strip()]:
+        try:
+            chosen_analysts.append(AnalystType(token))
+        except ValueError:
+            # Attempt case-insensitive match on enum values
+            for at in AnalystType:
+                if at.value.lower().startswith(token.lower()):
+                    chosen_analysts.append(at)
+                    break
+    if not chosen_analysts:
+        console.print("[red]No valid analysts specified[/red]")
+        raise typer.Exit(code=1)
+
+    base_selections = {
+        'research_depth': research_depth,
+        'shallow_thinker': shallow_thinker,
+        'deep_thinker': deep_thinker,
+        'backend_url': DEFAULT_CONFIG.get('backend_url', ''),
+        'llm_provider': llm_provider,
+        'user_position': user_position,
+        'cost_per_trade': cost_per_trade,
+        'analysts': chosen_analysts,
+        'analysis_date': analysis_date,
+    }
+
+    start_time = time.time()
+    results = []
+    max_workers = max(1, min(len(symbol_list), parallel))
+    console.print(f"[bold cyan]Launching {len(symbol_list)} analyses (parallel={max_workers})...[/bold cyan]")
+
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        future_map = {ex.submit(_run_single_ticker, sym, base_selections, {}): sym for sym in symbol_list}
+        for fut in as_completed(future_map):
+            sym = future_map[fut]
+            ticker, ok, decision, rdir, err = fut.result()
+            results.append((ticker, ok, decision, rdir, err))
+            if ok:
+                console.print(f"[green]✔ Completed {ticker}[/green]")
+            else:
+                console.print(f"[red]✖ Failed {ticker}: {err}[/red]")
+
+    # Summary Table
+    table = Table(title="Multi-Ticker Summary", box=box.SIMPLE_HEAVY)
+    table.add_column("Ticker", style="bold")
+    table.add_column("Status")
+    table.add_column("Decision / Error")
+    table.add_column("Results Dir")
+    for (ticker, ok, decision, rdir, err) in sorted(results, key=lambda x: x[0]):
+        table.add_row(ticker, "SUCCESS" if ok else "ERROR", str(decision) if ok else (err or "-"), rdir or "-")
+    console.print(table)
+    console.print(f"Elapsed: {time.time() - start_time:.2f}s")

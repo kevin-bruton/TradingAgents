@@ -729,13 +729,105 @@ def _get_valid_models(provider):
             "o1-preview",
             "o1-mini"
         ]
+    elif provider == "openrouter":
+        # Load OpenRouter models from providers_models.yaml
+        try:
+            import yaml
+            import os
+            config_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+                "providers_models.yaml"
+            )
+            with open(config_path, 'r') as f:
+                providers_config = yaml.safe_load(f)
+            
+            models = []
+            if 'providers' in providers_config and 'openrouter' in providers_config['providers']:
+                openrouter_models = providers_config['providers']['openrouter'].get('models', {})
+                # Collect all model IDs from both quick and deep categories
+                for category in ['quick', 'deep']:
+                    if category in openrouter_models:
+                        for model in openrouter_models[category]:
+                            if 'id' in model and model['id'] not in models:
+                                models.append(model['id'])
+            return models if models else []
+        except Exception:
+            # Fallback to empty list if YAML loading fails
+            return []
     else:
         return []
 
 
+def _call_llm_api_with_retry(prompt, config, max_attempts=None):
+    """Wrapper around _call_llm_api with retry logic for transient errors.
+    
+    This is specifically useful for long-running queries like news/social media
+    that may experience connection timeouts or temporary network issues.
+    """
+    import time
+    import random
+    
+    if max_attempts is None:
+        max_attempts = config.get("llm_max_retries", 3)
+    
+    base_delay = config.get("llm_retry_backoff", 2)
+    last_error = None
+    
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return _call_llm_api(prompt, config)
+        except Exception as e:
+            last_error = e
+            error_str = str(e).lower()
+            
+            # Check if it's a transient error worth retrying
+            is_transient = (
+                "connection" in error_str or
+                "timeout" in error_str or
+                "network" in error_str or
+                "temporarily unavailable" in error_str or
+                "503" in error_str or
+                "504" in error_str
+            )
+            
+            # Don't retry auth errors, invalid model, or quota/rate limit errors
+            is_permanent = (
+                "authentication" in error_str or
+                "api key" in error_str or
+                "invalid model" in error_str or
+                "quota" in error_str or
+                "rate limit" in error_str or
+                "429" in error_str or
+                "401" in error_str or
+                "403" in error_str
+            )
+            
+            if is_permanent or attempt >= max_attempts:
+                # Don't retry permanent errors or if we've exhausted attempts
+                raise
+            
+            if is_transient:
+                # Exponential backoff with jitter
+                delay = min(base_delay * (2 ** (attempt - 1)), 60)
+                jitter = random.uniform(-0.3 * delay, 0.3 * delay)
+                sleep_time = max(0.5, delay + jitter)
+                
+                print(f"⚠️  Transient error on attempt {attempt}/{max_attempts}, retrying in {sleep_time:.1f}s...")
+                time.sleep(sleep_time)
+            else:
+                # Unknown error type, don't retry
+                raise
+    
+    # If we get here, all retries failed
+    if last_error:
+        raise last_error
+    
+
 def _call_llm_api(prompt, config):
     """Helper function to call either OpenAI or Gemini API based on configuration"""
     provider = config["llm_provider"]
+    # Lazy import to avoid circulars & only pay cost on first usage
+    from tradingagents.utils.concurrency import llm_call
     
     if provider == "gemini":
         # Use Gemini
@@ -755,13 +847,25 @@ def _call_llm_api(prompt, config):
         valid_models = _get_valid_models("gemini")
         
         try:
-            gemini_model = ChatGoogleGenerativeAI(
-                model=model,
-                temperature=1,
-                max_tokens=4096,
-                google_api_key=api_key
-            )
-            response = gemini_model.invoke(prompt)
+            # Build Gemini model with timeout support
+            gemini_kwargs = {
+                "model": model,
+                "temperature": 1,
+                "max_tokens": 4096,
+                "google_api_key": api_key
+            }
+            
+            # Add timeout if configured (helps with long-running news/social queries)
+            if config.get("http_timeout"):
+                gemini_kwargs["timeout"] = config["http_timeout"]
+            
+            # Add max_retries if configured
+            if config.get("llm_max_retries"):
+                gemini_kwargs["max_retries"] = config["llm_max_retries"]
+            
+            gemini_model = ChatGoogleGenerativeAI(**gemini_kwargs)
+            with llm_call():
+                response = gemini_model.invoke(prompt)
             return response.content
             
         except NotFound as e:
@@ -803,69 +907,100 @@ def _call_llm_api(prompt, config):
         from openai import AuthenticationError, RateLimitError, NotFoundError
         from tradingagents.utils.llm_client import build_openai_compatible_client
         
+        # Determine the actual provider name for error messages
+        provider_lower = provider.lower()
+        if provider_lower == "openrouter":
+            provider_name = "OpenRouter"
+            provider_key = "OPENROUTER_API_KEY"
+            provider_key_url = "Get your key from: https://openrouter.ai/keys"
+        elif provider_lower == "ollama":
+            provider_name = "Ollama"
+            provider_key = None  # Ollama doesn't require API key
+            provider_key_url = None
+        else:
+            provider_name = "OpenAI"
+            provider_key = "OPENAI_API_KEY"
+            provider_key_url = None
+        
         # Check if API key is available based on provider
         from tradingagents.utils.error_messages import missing_api_key, invalid_model, quota_exceeded, authentication_failed, connection_failed, provider_error
-        if provider.lower() == "openrouter":
+        if provider_lower == "openrouter":
             api_key = os.getenv("OPENROUTER_API_KEY")
             if not api_key:
                 raise ValueError(missing_api_key("OpenRouter", "OPENROUTER_API_KEY", "Get your key from: https://openrouter.ai/keys"))
-        else:
+        elif provider_lower != "ollama":
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError(missing_api_key("OpenAI", "OPENAI_API_KEY"))
         
         model = config["quick_think_llm"]
-        valid_models = _get_valid_models("openai")
+        # Get valid models based on actual provider
+        valid_models = _get_valid_models(provider_lower)
         
         try:
             # Centralized client creation (ensures base_url + correct key usage)
-            client, _embedding_hint = build_openai_compatible_client(config, purpose="chat")
-            response = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": prompt,
-                    }
-                ],
-                temperature=1,
-                max_tokens=4096,
-                top_p=1,
+            # Pass timeout and max_retries to handle long-running news/social queries
+            client, _embedding_hint = build_openai_compatible_client(
+                config, 
+                purpose="chat",
+                timeout=config.get("http_timeout"),
+                max_retries=config.get("llm_max_retries", 3)
             )
+            with llm_call():
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": prompt,
+                        }
+                    ],
+                    temperature=1,
+                    max_tokens=4096,
+                    top_p=1,
+                )
             return response.choices[0].message.content
             
         except NotFoundError as e:
-            raise ValueError(invalid_model("OpenAI", model, valid_models)) from e
+            raise ValueError(invalid_model(provider_name, model, valid_models)) from e
             
         except RateLimitError as e:
-            raise ValueError(quota_exceeded("OpenAI", model)) from e
+            raise ValueError(quota_exceeded(provider_name, model)) from e
             
         except AuthenticationError as e:
-            raise ValueError(authentication_failed("OpenAI")) from e
+            raise ValueError(authentication_failed(provider_name)) from e
             
         except Exception as e:
-            # Catch any other OpenAI API errors (connection, etc.)
+            # Catch any other OpenAI-compatible API errors (connection, etc.)
             error_str = str(e).lower()
             if "connection" in error_str:
                 error_msg = (
-                    f"❌ OpenAI API connection failed\n"
-                    f"Unable to connect to OpenAI API at {config['backend_url']}\n"
+                    f"❌ {provider_name} API connection failed\n"
+                    f"Unable to connect to {provider_name} API at {config['backend_url']}\n"
                     f"This could be due to:\n"
                     f"  • Network connectivity issues\n"
                     f"  • Invalid backend URL\n"
                     f"  • Firewall blocking the connection\n"
-                    f"  • OpenAI service temporarily unavailable\n"
+                    f"  • {provider_name} service temporarily unavailable\n"
                     f"\nAlternatives:\n"
                     f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
-                    f"  • Use offline tools: 'online_tools': False in default_config.py"
+                    f"  • Use offline tools: 'online_tools': False in default_config.py\n"
+                    f"\nRaw error: {str(e)}"
                 )
                 raise ValueError(error_msg) from e
             elif "quota" in error_str or "rate limit" in error_str or "429" in error_str:
+                # Build billing check message based on provider
+                billing_check = ""
+                if provider_lower == "openai":
+                    billing_check = "  • Check billing: https://platform.openai.com/account/billing\n"
+                elif provider_lower == "openrouter":
+                    billing_check = "  • Check credits: https://openrouter.ai/credits\n"
+                
                 error_msg = (
-                    f"❌ OpenAI API quota/rate limit exceeded\n"
-                    f"You have hit your usage limits for the OpenAI API.\n"
+                    f"❌ {provider_name} API quota/rate limit exceeded\n"
+                    f"You have hit your usage limits for the {provider_name} API.\n"
                     f"Options:\n"
-                    f"  • Check billing: https://platform.openai.com/account/billing\n"
+                    f"{billing_check}"
                     f"  • Wait for quota to reset\n"
                     f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
                     f"  • Use offline tools: 'online_tools': False in default_config.py"
@@ -873,10 +1008,11 @@ def _call_llm_api(prompt, config):
                 raise ValueError(error_msg) from e
             else:
                 # Re-raise other unexpected errors with provider context
+                valid_models_display = ', '.join(valid_models[:5]) if valid_models else 'N/A'
                 error_msg = (
-                    f"❌ OpenAI API error with model '{model}'\n"
+                    f"❌ {provider_name} API error with model '{model}'\n"
                     f"Error: {str(e)}\n"
-                    f"Valid models: {', '.join(valid_models[:5])}...\n"
+                    f"Valid models: {valid_models_display}{'...' if len(valid_models) > 5 else ''}\n"
                     f"\nAlternatives:\n"
                     f"  • Switch to Gemini: 'llm_provider': 'gemini' in default_config.py\n"
                     f"  • Use offline tools: 'online_tools': False in default_config.py"
@@ -885,18 +1021,21 @@ def _call_llm_api(prompt, config):
 
 
 def get_stock_news_from_llm(ticker, curr_date):
+    """Get stock news from LLM with automatic retry for transient errors."""
     config = get_config()
     prompt = f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period."
-    return _call_llm_api(prompt, config)
+    return _call_llm_api_with_retry(prompt, config)
 
 
 def get_global_news_from_llm(curr_date):
+    """Get global news from LLM with automatic retry for transient errors."""
     config = get_config()
     prompt = f"Can you search global or macroeconomics news from 7 days before {curr_date} to {curr_date} that would be informative for trading purposes? Make sure you only get the data posted during that period."
-    return _call_llm_api(prompt, config)
+    return _call_llm_api_with_retry(prompt, config)
 
 
 def get_fundamentals_from_llm(ticker, curr_date):
+    """Get fundamentals from LLM with automatic retry for transient errors."""
     config = get_config()
     prompt = f"Can you search for fundamental analysis discussions on {ticker} during the month before {curr_date} to the month of {curr_date}. Make sure you only get the data posted during that period. List as a table, with PE/PS/Cash flow/ etc"
-    return _call_llm_api(prompt, config)
+    return _call_llm_api_with_retry(prompt, config)

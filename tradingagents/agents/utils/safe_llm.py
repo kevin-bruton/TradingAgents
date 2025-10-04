@@ -3,6 +3,11 @@ import random
 from typing import Any, Callable, Sequence, Union
 import json
 
+try:
+    from tradingagents.utils.concurrency_limiter import limiter  # type: ignore
+except Exception:  # pragma: no cover
+    limiter = None  # Fallback if not available
+
 # NOTE: The previous helper invoke_with_retries (llm_resilience.py) has been removed.
 # All code should now use safe_invoke_llm + LLMRetryConfig for a single, consistent
 # retry implementation (network/json transient errors with jittered exponential backoff).
@@ -78,13 +83,20 @@ def safe_invoke_llm(llm: Any, payload: Union[str, Sequence[dict]], cfg: LLMRetry
 
     attempts = 0
     last_error: Exception | None = None
+    # Infer provider/model heuristically for limiting
+    provider = getattr(llm, 'provider', None) or getattr(getattr(llm, '_client', None), 'provider', None)
+    model_name = getattr(llm, 'model_name', None) or getattr(llm, 'model', None)
+
     while attempts < cfg.max_attempts:
         attempts += 1
         try:
-            return llm.invoke(payload)
+            if limiter and (limiter._global_limit or provider in limiter._provider_limits):  # type: ignore[attr-defined]
+                with limiter.acquire(provider=provider, model=model_name):
+                    return llm.invoke(payload)
+            else:
+                return llm.invoke(payload)
         except Exception as e:  # noqa: BLE001
             is_transient = isinstance(e, tuple(TRANSIENT_EXCEPTION_TYPES))
-            # Some OpenAI / router errors wrap JSON decode text; heuristic fallback
             if not is_transient and 'Expecting value' in str(e) and 'json' in str(e).lower():
                 is_transient = True
             if attempts >= cfg.max_attempts or not is_transient:
