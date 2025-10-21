@@ -81,6 +81,8 @@ providers:
     base_url: https://openrouter.ai/api/v1
     models:
       quick:
+        - id: z-ai/glm-4.5-air:free
+          name: "Z.AI: GLM 4.5 Air (free)"
         - id: meta-llama/llama-4-maverick:free
           name: "Meta: Llama 4 Maverick (free)"
         - id: deepseek/deepseek-chat-v3.1:free
@@ -94,6 +96,8 @@ providers:
         - id: google/gemini-2.0-flash-exp:free
           name: "Google: Gemini 2.0 Flash (free)"
       deep:
+        - id: z-ai/glm-4.5-air:free
+          name: "Z.AI: GLM 4.5 Air (free)"
         - id: deepseek/deepseek-r1:free
           name: "DeepSeek: R1 (free)"
         - id: qwen/qwen3-235b-a22b:free
