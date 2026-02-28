@@ -220,6 +220,7 @@ def select_deep_thinking_agent(provider) -> str:
             ("Grok 4 Fast (Non-Reasoning) - Speed optimized", "grok-4-fast-non-reasoning"),
         ],
         "openrouter": [
+            ("qwen/qwen3-vl-235b-a22b-thinking", "qwen/qwen3-vl-235b-a22b-thinking"),
             ("Z.AI GLM 4.5 Air (free)", "z-ai/glm-4.5-air:free"),
             ("NVIDIA Nemotron 3 Nano 30B (free)", "nvidia/nemotron-3-nano-30b-a3b:free"),
         ],
