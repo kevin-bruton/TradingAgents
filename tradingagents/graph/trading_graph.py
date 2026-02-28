@@ -187,6 +187,10 @@ class TradingAgentsGraph:
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
+        if trade_date:
+            set_config({**self.config, "as_of_date": str(trade_date)})
+        else:
+            set_config(self.config)
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(

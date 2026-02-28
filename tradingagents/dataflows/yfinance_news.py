@@ -72,9 +72,11 @@ def get_news_yfinance(
         # Parse date range for filtering
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        is_historical = end_dt.date() < datetime.now().date()
 
         news_str = ""
         filtered_count = 0
+        skipped_undated = 0
 
         for article in news:
             data = _extract_article_data(article)
@@ -84,6 +86,9 @@ def get_news_yfinance(
                 pub_date_naive = data["pub_date"].replace(tzinfo=None)
                 if not (start_dt <= pub_date_naive <= end_dt + relativedelta(days=1)):
                     continue
+            elif is_historical:
+                skipped_undated += 1
+                continue
 
             news_str += f"### {data['title']} (source: {data['publisher']})\n"
             if data["summary"]:
@@ -96,7 +101,13 @@ def get_news_yfinance(
         if filtered_count == 0:
             return f"No news found for {ticker} between {start_date} and {end_date}"
 
-        return f"## {ticker} News, from {start_date} to {end_date}:\n\n{news_str}"
+        note = ""
+        if skipped_undated:
+            note = (
+                f"Note: Skipped {skipped_undated} undated articles to avoid look-ahead bias.\n\n"
+            )
+
+        return f"## {ticker} News, from {start_date} to {end_date}:\n\n{note}{news_str}"
 
     except Exception as e:
         return f"Error fetching news for {ticker}: {str(e)}"
@@ -161,9 +172,29 @@ def get_global_news_yfinance(
         curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
         start_dt = curr_dt - relativedelta(days=look_back_days)
         start_date = start_dt.strftime("%Y-%m-%d")
+        is_historical = curr_dt.date() < datetime.now().date()
+        skipped_undated = 0
+
+        filtered_news = []
+        for article in all_news:
+            if "content" in article:
+                data = _extract_article_data(article)
+                pub_date = data["pub_date"]
+            else:
+                pub_date = None
+
+            if pub_date:
+                pub_date_naive = pub_date.replace(tzinfo=None)
+                if not (start_dt <= pub_date_naive <= curr_dt + relativedelta(days=1)):
+                    continue
+            elif is_historical:
+                skipped_undated += 1
+                continue
+
+            filtered_news.append(article)
 
         news_str = ""
-        for article in all_news[:limit]:
+        for article in filtered_news[:limit]:
             # Handle both flat and nested structures
             if "content" in article:
                 data = _extract_article_data(article)
@@ -184,7 +215,16 @@ def get_global_news_yfinance(
                 news_str += f"Link: {link}\n"
             news_str += "\n"
 
-        return f"## Global Market News, from {start_date} to {curr_date}:\n\n{news_str}"
+        if not news_str:
+            return f"No global news found for {curr_date}"
+
+        note = ""
+        if skipped_undated:
+            note = (
+                f"Note: Skipped {skipped_undated} undated articles to avoid look-ahead bias.\n\n"
+            )
+
+        return f"## Global Market News, from {start_date} to {curr_date}:\n\n{note}{news_str}"
 
     except Exception as e:
         return f"Error fetching global news: {str(e)}"

@@ -198,6 +198,16 @@ print(decision)
 
 See `tradingagents/default_config.py` for all configuration options.
 
+### Backtest Script
+
+Run a backtest across a date range (skipping weekends and US market holidays):
+
+```bash
+python backtest.py NVDA 2026-01-01 2026-01-31
+```
+
+Decisions are appended to `results/backtest_<ticker>_<start>_<end>.csv` after each trading day.
+
 ## Contributing
 
 We welcome contributions from the community! Whether it's fixing a bug, improving documentation, or suggesting a new feature, your input helps make this project better. If you are interested in this line of research, please consider joining our open-source financial AI research community [Tauric Research](https://tauric.ai/).
