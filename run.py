@@ -1,4 +1,4 @@
-import argparse
+from prettytable import PrettyTable
 from datetime import date
 import os
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -44,16 +44,23 @@ config = {
 # Initialize with custom config
 ta = TradingAgentsGraph(debug=True, config=config)
 
-# parse CLI for company name (positional, default "NVDA") and set trade_date to today
-parser = argparse.ArgumentParser(description="Run TradingAgents propagation")
-parser.add_argument("company_name", nargs="?", default="NVDA", help="Ticker/company name (default: NVDA)")
-args = parser.parse_args()
-company_name = args.company_name
+symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "F", "KO", "MCD"]
 trade_date = date.today().isoformat()
 
+decisions = {}
 # forward propagate
-_, decision = ta.propagate(company_name.upper(), trade_date)
-print(f"Decision: {decision}")  # print the decision (decision)
+for symbol in symbols:
+    _, decision = ta.propagate(symbol.upper(), trade_date)
+    decisions[symbol] = decision
+    print(f"Decision for {symbol} = {decision}")  # print the decision (decision)
 
+table = PrettyTable()
+table.field_names = ["Symbol", "Decision"]
+
+for symbol, decision in decisions.items():
+    table.add_row([symbol, decision])
+
+print(f"Today's Trading Decisions ({trade_date}):")
+print(table)
 # Memorize mistakes and reflect
 # ta.reflect_and_remember(1000) # parameter is the position returns

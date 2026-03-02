@@ -1,9 +1,8 @@
 # Copilot instructions
 
 ## Build and test
-- Install dependencies: `pip install -r requirements.txt`
-- Run the CLI (interactive): `python -m cli.main` or `tradingagents`
-- Single test/smoke run: `python test.py`
+- Install dependencies: `uv sync`
+- Run the CLI (interactive): `uv run -m cli.main` or `tradingagents`
 
 ## Architecture (high level)
 - `TradingAgentsGraph` (tradingagents/graph/trading_graph.py) orchestrates a LangGraph StateGraph of analyst, researcher, trader, and risk nodes. `GraphSetup` wires the nodes and edges, `ConditionalLogic` drives loop/stop decisions, `Propagator` initializes state, and `Reflector`/`SignalProcessor` post-process outputs.
