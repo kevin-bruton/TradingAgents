@@ -1,4 +1,5 @@
 from typing import Annotated
+from datetime import datetime, date
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -109,6 +110,75 @@ VENDOR_METHODS = {
     },
 }
 
+
+def _parse_date(value: str):
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_date(value: str, as_of_date: date) -> str:
+    parsed = _parse_date(value)
+    if not parsed:
+        return value
+    return min(parsed, as_of_date).isoformat()
+
+
+def _apply_as_of_date(method: str, args: list, as_of_date: date):
+    as_of_str = as_of_date.isoformat()
+    today = datetime.now().date()
+
+    if method == "get_insider_transactions" and as_of_date < today:
+        return args, (
+            f"Insider transactions are only available as of today; "
+            f"skipping historical request for {as_of_str} to avoid look-ahead bias."
+        )
+
+    if method in {"get_stock_data", "get_news"} and len(args) >= 3:
+        start_date = args[1]
+        end_date = _clamp_date(args[2], as_of_date)
+        start_dt = _parse_date(start_date)
+        end_dt = _parse_date(end_date)
+        if start_dt and end_dt and start_dt > end_dt:
+            return args, f"No data available between {start_date} and {end_date}."
+        args[2] = end_date
+        return args, None
+
+    if method == "get_indicators" and len(args) >= 3:
+        curr_date = args[2] or as_of_str
+        curr_dt = _parse_date(curr_date)
+        if not curr_dt or curr_dt > as_of_date:
+            curr_date = as_of_str
+        args[2] = curr_date
+        return args, None
+
+    if method == "get_global_news" and len(args) >= 1:
+        curr_date = args[0] or as_of_str
+        curr_dt = _parse_date(curr_date)
+        if not curr_dt or curr_dt > as_of_date:
+            curr_date = as_of_str
+        args[0] = curr_date
+        return args, None
+
+    if method == "get_fundamentals" and len(args) >= 2:
+        curr_date = args[1] or as_of_str
+        curr_dt = _parse_date(curr_date)
+        if not curr_dt or curr_dt > as_of_date:
+            curr_date = as_of_str
+        args[1] = curr_date
+        return args, None
+
+    if method in {"get_balance_sheet", "get_cashflow", "get_income_statement"} and len(args) >= 3:
+        curr_date = args[2] or as_of_str
+        curr_dt = _parse_date(curr_date)
+        if not curr_dt or curr_dt > as_of_date:
+            curr_date = as_of_str
+        args[2] = curr_date
+        return args, None
+
+    return args, None
+
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
     for category, info in TOOLS_CATEGORIES.items():
@@ -136,6 +206,13 @@ def route_to_vendor(method: str, *args, **kwargs):
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    config = get_config()
+    as_of_date = _parse_date(config.get("as_of_date")) if config else None
+    if as_of_date:
+        adjusted_args, early_result = _apply_as_of_date(method, list(args), as_of_date)
+        if early_result is not None:
+            return early_result
+        args = tuple(adjusted_args)
 
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")

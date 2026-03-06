@@ -22,8 +22,8 @@ class StockstatsUtils:
         today_date = pd.Timestamp.today()
         curr_date_dt = pd.to_datetime(curr_date)
 
-        end_date = today_date
-        start_date = today_date - pd.DateOffset(years=15)
+        end_date = min(curr_date_dt, today_date)
+        start_date = end_date - pd.DateOffset(years=15)
         start_date_str = start_date.strftime("%Y-%m-%d")
         end_date_str = end_date.strftime("%Y-%m-%d")
 
@@ -49,6 +49,8 @@ class StockstatsUtils:
             )
             data = data.reset_index()
             data.to_csv(data_file, index=False)
+
+        data = data[data["Date"] <= end_date]
 
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
