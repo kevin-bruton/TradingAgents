@@ -1,3 +1,6 @@
+import logging
+import sys
+
 from prettytable import PrettyTable
 from datetime import date
 import os
@@ -42,7 +45,38 @@ config = {
 }
 
 # Initialize with custom config
-ta = TradingAgentsGraph(debug=True, config=config)
+
+def configure_progress_logger() -> logging.Logger:
+    logger = logging.getLogger("backtest.progress")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    return logger
+
+class ProgressTracker:
+    def __init__(self, progress_logger: logging.Logger) -> None:
+        self._logger = progress_logger
+        self._started_agents: set[str] = set()
+
+    def reset(self) -> None:
+        self._started_agents.clear()
+
+    def __call__(self, event: str, agent_name: str) -> None:
+        if event != "start":
+            return
+        if agent_name in self._started_agents:
+            return
+        self._started_agents.add(agent_name)
+        self._logger.info("Agent started: %s", agent_name)
+
+logging.basicConfig(level=logging.ERROR, format="%(message)s")
+progress_logger = configure_progress_logger()
+progress_tracker = ProgressTracker(progress_logger)
+ta = TradingAgentsGraph(debug=False, config=config, progress_callback=progress_tracker)
 
 symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "F", "KO", "MCD"]
 trade_date = date.today().isoformat()
@@ -50,6 +84,7 @@ trade_date = date.today().isoformat()
 decisions = {}
 # forward propagate
 for symbol in symbols:
+    print(f"\nProcessing {symbol}...")
     _, decision = ta.propagate(symbol.upper(), trade_date)
     decisions[symbol] = decision
     print(f"Decision for {symbol} = {decision}")  # print the decision (decision)

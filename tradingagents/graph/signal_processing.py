@@ -28,4 +28,4 @@ class SignalProcessor:
             ("human", full_signal),
         ]
 
-        return self.quick_thinking_llm.invoke(messages).content
+        return str(self.quick_thinking_llm.invoke(messages).content).strip()
