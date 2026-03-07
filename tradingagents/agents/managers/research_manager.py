@@ -1,6 +1,8 @@
 import time
 import json
 
+from tradingagents.position_management.prompt_context import format_position_context
+
 
 def create_research_manager(llm, memory):
     def research_manager_node(state) -> dict:
@@ -9,6 +11,9 @@ def create_research_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_position = state.get("current_position")
+        position_context = format_position_context(current_position)
+        position_is_open = bool(current_position and current_position.get("open"))
 
         investment_debate_state = state["investment_debate_state"]
 
@@ -18,6 +23,16 @@ def create_research_manager(llm, memory):
         past_memory_str = ""
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
+
+        if position_is_open:
+            exposure_guidance = (
+                "A position is already open. Explicitly account for existing exposure by stating whether to maintain, "
+                "add, reduce, or exit, and ensure your plan is coherent with existing stop_loss/take_profit context."
+            )
+        else:
+            exposure_guidance = (
+                "No position is currently open. Focus on entry-readiness and avoid language that assumes active exposure."
+            )
 
         prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
 
@@ -32,6 +47,12 @@ Take into account your past mistakes on similar situations. Use these insights t
 
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
+
+Current position context:
+{position_context}
+
+Exposure coherence requirement:
+{exposure_guidance}
 
 Here is the debate:
 Debate History:
