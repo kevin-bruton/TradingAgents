@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from tradingagents.agents import *
 from langgraph.prebuilt import ToolNode
 from langgraph.graph import END, StateGraph, START, MessagesState
+from tradingagents.position_management.schema import PositionConfig
 
 
 # Researcher team state
@@ -50,6 +51,9 @@ class RiskDebateState(TypedDict):
 class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
+    current_position: Annotated[
+        Optional[PositionConfig], "Current position information for the symbol"
+    ]
 
     sender: Annotated[str, "Agent that sent this message"]
 

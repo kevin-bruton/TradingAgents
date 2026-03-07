@@ -18,6 +18,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.position_management.schema import PositionConfig
 from tradingagents.dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
@@ -186,7 +187,12 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date):
+    def propagate(
+        self,
+        company_name,
+        trade_date,
+        current_position: Optional[PositionConfig] = None,
+    ):
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
@@ -197,7 +203,7 @@ class TradingAgentsGraph:
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date
+            company_name, trade_date, current_position=current_position
         )
         args = self.propagator.get_graph_args()
 
