@@ -25,6 +25,10 @@ from rich.rule import Rule
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.position_management import (
+    TradeDecision,
+    apply_trailing_stop_guardrail,
+)
 from cli.models import AnalystType
 from cli.utils import *
 from cli.announcements import fetch_announcements, display_announcements
@@ -613,7 +617,55 @@ def get_analysis_date():
             )
 
 
-def save_report_to_disk(final_state, ticker: str, save_path: Path):
+def _format_level(value: float | None) -> str:
+    return "null" if value is None else f"{value:.2f}"
+
+
+def _format_structured_decision_summary(decision: TradeDecision) -> str:
+    return (
+        f"Decision={decision['decision']} | "
+        f"stop_loss={_format_level(decision['stop_loss'])} | "
+        f"take_profit={_format_level(decision['take_profit'])} | "
+        f"confidence_pct={decision['confidence_pct']:.2f}"
+    )
+
+
+def _format_structured_decision_markdown(decision: TradeDecision) -> str:
+    return (
+        "### Structured Decision\n"
+        f"- Decision: **{decision['decision']}**\n"
+        f"- Stop Loss: `{_format_level(decision['stop_loss'])}`\n"
+        f"- Take Profit: `{_format_level(decision['take_profit'])}`\n"
+        f"- Confidence %: `{decision['confidence_pct']:.2f}`\n\n"
+        "### Structured Rationale\n"
+        f"{decision['rationale']}"
+    )
+
+
+def _build_portfolio_decision_content(
+    final_state: dict,
+    structured_decision: Optional[TradeDecision] = None,
+) -> str:
+    parts = []
+    if structured_decision is not None:
+        parts.append(_format_structured_decision_markdown(structured_decision))
+
+    risk_state = final_state.get("risk_debate_state") or {}
+    judge_decision = risk_state.get("judge_decision") or final_state.get(
+        "final_trade_decision"
+    )
+    if judge_decision:
+        parts.append(f"### Portfolio Manager\n{judge_decision}")
+
+    return "\n\n".join(parts)
+
+
+def save_report_to_disk(
+    final_state,
+    ticker: str,
+    save_path: Path,
+    structured_decision: Optional[TradeDecision] = None,
+):
     """Save complete analysis report to disk with organized subfolders."""
     save_path.mkdir(parents=True, exist_ok=True)
     sections = []
@@ -712,14 +764,15 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
             content = "\n\n".join(f"### {name}\n{text}" for name, text in risk_parts)
             sections.append(f"## IV. Risk Management Team Decision\n\n{content}")
 
-        # 5. Portfolio Manager
-        if risk.get("judge_decision"):
-            portfolio_dir = save_path / "5_portfolio"
-            portfolio_dir.mkdir(exist_ok=True)
-            (portfolio_dir / "decision.md").write_text(
-                risk["judge_decision"], encoding="utf-8"
-            )
-            sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
+    # 5. Portfolio Manager
+    portfolio_content = _build_portfolio_decision_content(
+        final_state, structured_decision=structured_decision
+    )
+    if portfolio_content:
+        portfolio_dir = save_path / "5_portfolio"
+        portfolio_dir.mkdir(exist_ok=True)
+        (portfolio_dir / "decision.md").write_text(portfolio_content, encoding="utf-8")
+        sections.append(f"## V. Portfolio Manager Decision\n\n{portfolio_content}")
 
     # Write consolidated report
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -729,7 +782,10 @@ def save_report_to_disk(final_state, ticker: str, save_path: Path):
     return save_path / "complete_report.md"
 
 
-def display_complete_report(final_state):
+def display_complete_report(
+    final_state,
+    structured_decision: Optional[TradeDecision] = None,
+):
     """Display the complete analysis report sequentially (avoids truncation)."""
     console.print()
     console.print(Rule("Complete Analysis Report", style="bold green"))
@@ -770,6 +826,7 @@ def display_complete_report(final_state):
         console.print(Panel(Markdown(final_state["trader_investment_plan"]), title="Trader", border_style="blue", padding=(1, 2)))
 
     # IV. Risk Management Team
+    judge_decision = None
     if final_state.get("risk_debate_state"):
         risk = final_state["risk_debate_state"]
         risk_reports = []
@@ -783,11 +840,29 @@ def display_complete_report(final_state):
             console.print(Panel("[bold]IV. Risk Management Team Decision[/bold]", border_style="red"))
             for title, content in risk_reports:
                 console.print(Panel(Markdown(content), title=title, border_style="blue", padding=(1, 2)))
+        judge_decision = risk.get("judge_decision")
 
-        # V. Portfolio Manager Decision
-        if risk.get("judge_decision"):
-            console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
-            console.print(Panel(Markdown(risk["judge_decision"]), title="Portfolio Manager", border_style="blue", padding=(1, 2)))
+    # V. Portfolio Manager Decision
+    if structured_decision is not None or judge_decision:
+        console.print(Panel("[bold]V. Portfolio Manager Decision[/bold]", border_style="green"))
+        if structured_decision is not None:
+            console.print(
+                Panel(
+                    Markdown(_format_structured_decision_markdown(structured_decision)),
+                    title="Structured Decision",
+                    border_style="blue",
+                    padding=(1, 2),
+                )
+            )
+        if judge_decision:
+            console.print(
+                Panel(
+                    Markdown(judge_decision),
+                    title="Portfolio Manager",
+                    border_style="blue",
+                    padding=(1, 2),
+                )
+            )
 
 
 def update_research_team_status(status):
@@ -1150,7 +1225,12 @@ def run_analysis():
 
         # Get final state and decision
         final_state = trace[-1]
-        decision = graph.process_signal(final_state["final_trade_decision"])
+        parsed_decision = graph.process_signal(final_state["final_trade_decision"])
+        decision = apply_trailing_stop_guardrail(
+            parsed_decision,
+            final_state.get("current_position"),
+        )
+        final_state["parsed_trade_decision"] = decision
 
         # Update all agent statuses to completed
         for agent in message_buffer.agent_status:
@@ -1159,16 +1239,28 @@ def run_analysis():
         message_buffer.add_message(
             "System", f"Completed analysis for {selections['analysis_date']}"
         )
+        message_buffer.add_message(
+            "System", f"Final structured decision: {_format_structured_decision_summary(decision)}"
+        )
 
         # Update final report sections
         for section in message_buffer.report_sections.keys():
-            if section in final_state:
+            if section == "final_trade_decision":
+                message_buffer.update_report_section(
+                    section,
+                    _build_portfolio_decision_content(
+                        final_state,
+                        structured_decision=decision,
+                    ),
+                )
+            elif section in final_state:
                 message_buffer.update_report_section(section, final_state[section])
 
         update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
     # Post-analysis prompts (outside Live context for clean interaction)
     console.print("\n[bold cyan]Analysis Complete![/bold cyan]\n")
+    console.print(f"[bold green]Final Decision:[/bold green] {_format_structured_decision_summary(decision)}")
 
     # Prompt to save report
     save_choice = typer.prompt("Save report?", default="Y").strip().upper()
@@ -1181,7 +1273,12 @@ def run_analysis():
         ).strip()
         save_path = Path(save_path_str)
         try:
-            report_file = save_report_to_disk(final_state, selections["ticker"], save_path)
+            report_file = save_report_to_disk(
+                final_state,
+                selections["ticker"],
+                save_path,
+                structured_decision=decision,
+            )
             console.print(f"\n[green]✓ Report saved to:[/green] {save_path.resolve()}")
             console.print(f"  [dim]Complete report:[/dim] {report_file.name}")
         except Exception as e:
@@ -1190,7 +1287,7 @@ def run_analysis():
     # Prompt to display full report
     display_choice = typer.prompt("\nDisplay full report on screen?", default="Y").strip().upper()
     if display_choice in ("Y", "YES", ""):
-        display_complete_report(final_state)
+        display_complete_report(final_state, structured_decision=decision)
 
 
 @app.command()

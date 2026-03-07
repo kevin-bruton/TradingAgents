@@ -5,6 +5,7 @@ from prettytable import PrettyTable
 from datetime import date
 import os
 from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.position_management import load_current_positions
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -80,20 +81,47 @@ ta = TradingAgentsGraph(debug=False, config=config, progress_callback=progress_t
 
 symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "F", "KO", "MCD"]
 trade_date = date.today().isoformat()
+positions_path = os.path.join(os.path.dirname(__file__), "current_positions.yaml")
+try:
+    current_positions = load_current_positions(positions_path)
+except (FileNotFoundError, ValueError) as exc:
+    raise SystemExit(str(exc)) from exc
+
+
+def _format_level(level: float | None) -> str:
+    return "null" if level is None else f"{level:.2f}"
 
 decisions = {}
 # forward propagate
 for symbol in symbols:
     print(f"\nProcessing {symbol}...")
-    _, decision = ta.propagate(symbol.upper(), trade_date)
+    current_position = current_positions.get(symbol.upper())
+    _, decision = ta.propagate(
+        symbol.upper(),
+        trade_date,
+        current_position=current_position,
+    )
     decisions[symbol] = decision
-    print(f"Decision for {symbol} = {decision}")  # print the decision (decision)
+    print(
+        f"Decision for {symbol} = {decision['decision']} "
+        f"(stop_loss={_format_level(decision['stop_loss'])}, "
+        f"take_profit={_format_level(decision['take_profit'])}, "
+        f"confidence_pct={decision['confidence_pct']:.2f})"
+    )
 
 table = PrettyTable()
-table.field_names = ["Symbol", "Decision"]
+table.field_names = ["Symbol", "Decision", "Stop Loss", "Take Profit", "Confidence %"]
 
 for symbol, decision in decisions.items():
-    table.add_row([symbol, decision])
+    table.add_row(
+        [
+            symbol,
+            decision["decision"],
+            _format_level(decision["stop_loss"]),
+            _format_level(decision["take_profit"]),
+            f"{decision['confidence_pct']:.2f}",
+        ]
+    )
 
 print(f"Today's Trading Decisions ({trade_date}):")
 print(table)

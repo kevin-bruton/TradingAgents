@@ -229,21 +229,28 @@ class TradingAgentsGraph:
         # Store current state for reflection
         self.curr_state = final_state
 
-        # Log state
-        self._log_state(trade_date, final_state)
-
-        # Return decision and processed signal
         parsed_decision = self.process_signal(final_state["final_trade_decision"])
         guarded_decision = apply_trailing_stop_guardrail(
             parsed_decision, final_state.get("current_position")
         )
+
+        # Log state
+        self._log_state(trade_date, final_state, guarded_decision)
+
+        # Return decision and processed signal
         return final_state, guarded_decision
 
-    def _log_state(self, trade_date, final_state):
+    def _log_state(
+        self,
+        trade_date,
+        final_state,
+        parsed_trade_decision: TradeDecision,
+    ):
         """Log the final state to a JSON file."""
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "current_position": final_state.get("current_position"),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
@@ -269,6 +276,7 @@ class TradingAgentsGraph:
             },
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
+            "parsed_trade_decision": parsed_trade_decision,
         }
 
         # Save to file
