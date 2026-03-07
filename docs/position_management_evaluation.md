@@ -1,12 +1,134 @@
-# Position Management Improvements
+# Position Management Operational Guide
 
-A plan for the following improvements must be prepared and saved as a markdown file:
-- When "uv run run.py" is executed, it must read from a file "current_positions.yaml" file, for each symbol, whether there is currently a position open, and if so, also obtain the stop loss level, and the take profit level (if there is one)
-- The agents must be modified to consider, in their evaluation, whether a current position is open or not. If there is a position already open, they must determine whether the stop loss must be modified. If it is to be modified, it should never be modified further away from the current price, only closer, if at all. If a position is not open, then if the agents recommend to "BUY" or "HOLD", then this recommendation should always be accompanied by a stop loss level and optionally, a take profit level. The final decision must always include with a "BUY" or "HOLD" recommendation, the stop loss level and optionally, a take profit level.
-- In the plan, it must be investigated carefully, as an expert professional stock market trader, which agents must be the ones to consider the current position status, and how, and also how each agent is to handle the stop loss and take profit levels.
-- The general criteria for establishing a stop loss level should be to determine a level where it is clear that the recommendation to BUY or HOLD would then be incorrect and to avoid further losses past this level. The stop loss level may be modified for open positions to work as a trailing stop.
-- When evaluating possible recommendations, the agents must be aware that the recommendations, and the open positions are revised before the open of each trading day.
-- When producing the output of ta.propagate, now, not only should the main decision be extracted and returned, but also the determined stop loss level and the determined take profit level, if it was included.
-- It must also be investigated how to adapt "backtest.py" so that the new functionality can be evaluated on historical data.
+This guide documents the active position-aware workflow implemented across `run.py`, `main.py`, `TradingAgentsGraph`, and `backtest.py`.
 
-With all these requirements, develop an position management implementation plan, with the recommended changes to the current project. Present pros and cons for alternatives where the best option is not obvious.
+## 1) `current_positions.yaml` input and fail-fast behavior
+
+### Required location for script workflows
+- `run.py` and `main.py` load positions from:
+  - `<repo_root>\current_positions.yaml`
+- Loading happens once at startup via `load_current_positions(...)`.
+- If the file is missing or invalid, the script exits immediately with a clear error message.
+
+### Strict validation (no silent fallback)
+The loader rejects invalid input with explicit errors:
+- file does not exist
+- path is not a file
+- invalid YAML syntax
+- top-level YAML is not a mapping (`symbol -> position`)
+- unknown keys in a symbol entry
+- missing required keys
+- incorrect types
+- unsupported `side` values
+- duplicate symbols after normalization
+
+Symbols are normalized to uppercase. If your YAML has both `nvda` and `NVDA`, loading fails because they normalize to the same key.
+
+### Schema (`symbol -> position`)
+Each symbol maps to:
+
+```yaml
+open: <bool>                 # required
+stop_loss: <number | null>   # required
+take_profit: <number | null> # required
+side: "long"                 # optional, defaults to "long" (long-only for now)
+```
+
+Notes:
+- `open` must be a YAML boolean (`true`/`false`).
+- `stop_loss` and `take_profit` must be numeric or `null`.
+- `side` currently supports only `"long"`.
+- Omitting a symbol is allowed; that symbol is treated as "no current position data provided."
+
+## 2) Example template
+
+Copy `current_positions.example.yaml` to `current_positions.yaml` and edit values for your symbols.
+
+```yaml
+NVDA:
+  open: true
+  stop_loss: 112.5
+  take_profit: 145.0
+  side: long
+
+AAPL:
+  open: false
+  stop_loss: null
+  take_profit: null
+```
+
+## 3) Structured decision contract
+
+The final risk-manager output must include exactly one fenced `json` block. It is parsed and validated into:
+
+```json
+{
+  "decision": "BUY | SELL | HOLD",
+  "stop_loss": "<number|null>",
+  "take_profit": "<number|null>",
+  "confidence_pct": "<0..100 number>",
+  "rationale": "<non-empty string>"
+}
+```
+
+Validation highlights:
+- `decision` must be uppercase `BUY`, `SELL`, or `HOLD`.
+- `confidence_pct` must be numeric within `[0, 100]`.
+- `rationale` must be a non-empty string.
+
+## 4) Trailing-stop guardrail behavior
+
+After structured parsing, a trailing-stop guardrail is applied for open long positions:
+
+- Guardrail applies only when:
+  - current position is open
+  - side is `long`
+  - an existing `stop_loss` is present
+  - decision is not `SELL`
+- For open long positions, `BUY`/`HOLD` with `stop_loss: null` is rejected (explicit error).
+- If the proposed stop-loss is looser than the existing stop, it is clamped back to the existing level.
+- A `SYSTEM WARNING:` line is appended to `rationale` when clamping occurs.
+
+Current runtime behavior in `TradingAgentsGraph.propagate(...)` applies guardrails without a `current_price` argument, so "looser" is evaluated by absolute level for long positions (`proposed_stop < existing_stop`).
+
+## 5) Runtime and output surfaces
+
+### `run.py` (multi-symbol script)
+- Loads `current_positions.yaml` at startup.
+- Passes per-symbol `current_position` into `ta.propagate(...)`.
+- Prints and tables these structured fields:
+  - `decision`
+  - `stop_loss`
+  - `take_profit`
+  - `confidence_pct`
+
+### `main.py` (single-symbol script)
+- Loads `current_positions.yaml` at startup.
+- Passes the symbol position into `ta.propagate(...)`.
+- Prints:
+  - `decision`, `stop_loss`, `take_profit`, `confidence_pct`, `rationale`
+
+### CLI (`cli/main.py`)
+- Surfaces structured decision fields in final summaries and saved reports.
+- Displays and persists:
+  - `decision`, `stop_loss`, `take_profit`, `confidence_pct`, `rationale`
+
+## 6) Backtest position lifecycle alignment
+
+`backtest.py` simulates position state day by day and writes:
+- `date`
+- `decision`
+- `stop_loss`
+- `take_profit`
+- `confidence_pct`
+- `position_status`
+- `rationale`
+
+`position_status` values include:
+- `OPEN`
+- `CLOSED`
+- `CLOSED_SELL`
+- `CLOSED_STOP_LOSS`
+- `CLOSED_TAKE_PROFIT`
+
+Stop/take-profit range checks use daily historical low/high values; lifecycle notes are appended to `rationale` when a stop-loss or take-profit trigger closes the simulated position.

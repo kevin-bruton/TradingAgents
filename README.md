@@ -198,6 +198,34 @@ print(decision)
 
 See `tradingagents/default_config.py` for all configuration options.
 
+### Position-Aware Workflow (`run.py` / `main.py`)
+
+`run.py` and `main.py` support position-aware decisioning and now load a repository-root file named `current_positions.yaml` at startup.
+
+If the file is missing or invalid, these scripts fail fast with an explicit error so you can fix input issues before running analysis.
+
+Quick start:
+
+```bash
+cp current_positions.example.yaml current_positions.yaml
+python run.py
+```
+
+For single-symbol runs:
+
+```bash
+python main.py
+```
+
+Structured decisions now include:
+- `decision`
+- `stop_loss`
+- `take_profit`
+- `confidence_pct`
+- `rationale`
+
+For full schema details (`current_positions.yaml`), guardrail behavior, and output expectations, see `docs/position_management_evaluation.md`.
+
 ### Backtest Script
 
 Run a backtest across a date range (skipping weekends and US market holidays):
@@ -207,6 +235,7 @@ python backtest.py NVDA 2026-01-01 2026-01-31
 ```
 
 Decisions are appended to `results/backtest_<ticker>_<start>_<end>.csv` after each trading day.
+The CSV includes `date`, `decision`, `stop_loss`, `take_profit`, `confidence_pct`, `position_status`, and `rationale`.
 
 ## Contributing
 
