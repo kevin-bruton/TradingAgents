@@ -18,7 +18,11 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.position_management.schema import PositionConfig
+from tradingagents.position_management import (
+    PositionConfig,
+    TradeDecision,
+    apply_trailing_stop_guardrail,
+)
 from tradingagents.dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
@@ -229,7 +233,11 @@ class TradingAgentsGraph:
         self._log_state(trade_date, final_state)
 
         # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        parsed_decision = self.process_signal(final_state["final_trade_decision"])
+        guarded_decision = apply_trailing_stop_guardrail(
+            parsed_decision, final_state.get("current_position")
+        )
+        return final_state, guarded_decision
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
@@ -291,6 +299,6 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal):
-        """Process a signal to extract the core decision."""
+    def process_signal(self, full_signal: str) -> TradeDecision:
+        """Process a signal into a validated structured decision."""
         return self.signal_processor.process_signal(full_signal)
