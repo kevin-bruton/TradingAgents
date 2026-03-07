@@ -7,6 +7,7 @@ DEFAULT_CONFIG = {
         os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
         "dataflows/data_cache",
     ),
+    "as_of_date": None,
     # LLM settings
     "llm_provider": "openai",
     "deep_think_llm": "gpt-5.2",

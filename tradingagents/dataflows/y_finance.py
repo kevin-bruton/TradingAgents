@@ -2,6 +2,7 @@ from typing import Annotated
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import yfinance as yf
+import pandas as pd
 import os
 from .stockstats_utils import StockstatsUtils
 
@@ -211,6 +212,9 @@ def _get_stock_stats_bulk(
                     f"{symbol}-YFin-data-2015-01-01-2025-03-25.csv",
                 )
             )
+            data["Date"] = pd.to_datetime(data["Date"])
+            curr_date_dt = pd.to_datetime(curr_date)
+            data = data[data["Date"] <= curr_date_dt]
             df = wrap(data)
         except FileNotFoundError:
             raise Exception("Stockstats fail: Yahoo Finance data not fetched yet!")
@@ -219,8 +223,8 @@ def _get_stock_stats_bulk(
         today_date = pd.Timestamp.today()
         curr_date_dt = pd.to_datetime(curr_date)
         
-        end_date = today_date
-        start_date = today_date - pd.DateOffset(years=15)
+        end_date = min(curr_date_dt, today_date)
+        start_date = end_date - pd.DateOffset(years=15)
         start_date_str = start_date.strftime("%Y-%m-%d")
         end_date_str = end_date.strftime("%Y-%m-%d")
         
@@ -245,7 +249,9 @@ def _get_stock_stats_bulk(
             )
             data = data.reset_index()
             data.to_csv(data_file, index=False)
-        
+
+        data = data[data["Date"] <= end_date]
+
         df = wrap(data)
         df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
     
@@ -305,36 +311,56 @@ def get_fundamentals(
         if not info:
             return f"No fundamentals data found for symbol '{ticker}'"
 
-        fields = [
-            ("Name", info.get("longName")),
-            ("Sector", info.get("sector")),
-            ("Industry", info.get("industry")),
-            ("Market Cap", info.get("marketCap")),
-            ("PE Ratio (TTM)", info.get("trailingPE")),
-            ("Forward PE", info.get("forwardPE")),
-            ("PEG Ratio", info.get("pegRatio")),
-            ("Price to Book", info.get("priceToBook")),
-            ("EPS (TTM)", info.get("trailingEps")),
-            ("Forward EPS", info.get("forwardEps")),
-            ("Dividend Yield", info.get("dividendYield")),
-            ("Beta", info.get("beta")),
-            ("52 Week High", info.get("fiftyTwoWeekHigh")),
-            ("52 Week Low", info.get("fiftyTwoWeekLow")),
-            ("50 Day Average", info.get("fiftyDayAverage")),
-            ("200 Day Average", info.get("twoHundredDayAverage")),
-            ("Revenue (TTM)", info.get("totalRevenue")),
-            ("Gross Profit", info.get("grossProfits")),
-            ("EBITDA", info.get("ebitda")),
-            ("Net Income", info.get("netIncomeToCommon")),
-            ("Profit Margin", info.get("profitMargins")),
-            ("Operating Margin", info.get("operatingMargins")),
-            ("Return on Equity", info.get("returnOnEquity")),
-            ("Return on Assets", info.get("returnOnAssets")),
-            ("Debt to Equity", info.get("debtToEquity")),
-            ("Current Ratio", info.get("currentRatio")),
-            ("Book Value", info.get("bookValue")),
-            ("Free Cash Flow", info.get("freeCashflow")),
-        ]
+        curr_date_dt = None
+        if curr_date:
+            try:
+                curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d").date()
+            except ValueError:
+                curr_date_dt = None
+
+        is_historical = curr_date_dt is not None and curr_date_dt < datetime.now().date()
+
+        if is_historical:
+            fields = [
+                ("Name", info.get("longName")),
+                ("Sector", info.get("sector")),
+                ("Industry", info.get("industry")),
+                ("Country", info.get("country")),
+                ("Currency", info.get("currency")),
+                ("Exchange", info.get("exchange")),
+                ("Website", info.get("website")),
+            ]
+        else:
+            fields = [
+                ("Name", info.get("longName")),
+                ("Sector", info.get("sector")),
+                ("Industry", info.get("industry")),
+                ("Market Cap", info.get("marketCap")),
+                ("PE Ratio (TTM)", info.get("trailingPE")),
+                ("Forward PE", info.get("forwardPE")),
+                ("PEG Ratio", info.get("pegRatio")),
+                ("Price to Book", info.get("priceToBook")),
+                ("EPS (TTM)", info.get("trailingEps")),
+                ("Forward EPS", info.get("forwardEps")),
+                ("Dividend Yield", info.get("dividendYield")),
+                ("Beta", info.get("beta")),
+                ("52 Week High", info.get("fiftyTwoWeekHigh")),
+                ("52 Week Low", info.get("fiftyTwoWeekLow")),
+                ("50 Day Average", info.get("fiftyDayAverage")),
+                ("200 Day Average", info.get("twoHundredDayAverage")),
+                ("Revenue (TTM)", info.get("totalRevenue")),
+                ("Gross Profit", info.get("grossProfits")),
+                ("EBITDA", info.get("ebitda")),
+                ("Net Income", info.get("netIncomeToCommon")),
+                ("Profit Margin", info.get("profitMargins")),
+                ("Operating Margin", info.get("operatingMargins")),
+                ("Return on Equity", info.get("returnOnEquity")),
+                ("Return on Assets", info.get("returnOnAssets")),
+                ("Debt to Equity", info.get("debtToEquity")),
+                ("Current Ratio", info.get("currentRatio")),
+                ("Book Value", info.get("bookValue")),
+                ("Free Cash Flow", info.get("freeCashflow")),
+            ]
 
         lines = []
         for label, value in fields:
@@ -342,6 +368,10 @@ def get_fundamentals(
                 lines.append(f"{label}: {value}")
 
         header = f"# Company Fundamentals for {ticker.upper()}\n"
+        if curr_date_dt:
+            header += f"# As of: {curr_date_dt.isoformat()}\n"
+        if is_historical:
+            header += "# Note: Time-sensitive metrics omitted to avoid look-ahead bias.\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
 
         return header + "\n".join(lines)
@@ -364,7 +394,17 @@ def get_balance_sheet(
         else:
             data = ticker_obj.balance_sheet
             
+        if curr_date:
+            try:
+                cutoff = datetime.strptime(curr_date, "%Y-%m-%d")
+                data.columns = pd.to_datetime(data.columns)
+                data = data.loc[:, data.columns <= cutoff]
+            except ValueError:
+                pass
+
         if data.empty:
+            if curr_date:
+                return f"No balance sheet data found for symbol '{ticker}' before {curr_date}"
             return f"No balance sheet data found for symbol '{ticker}'"
             
         # Convert to CSV string for consistency with other functions
@@ -372,6 +412,8 @@ def get_balance_sheet(
         
         # Add header information
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
+        if curr_date:
+            header += f"# As of: {curr_date}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         return header + csv_string
@@ -394,7 +436,17 @@ def get_cashflow(
         else:
             data = ticker_obj.cashflow
             
+        if curr_date:
+            try:
+                cutoff = datetime.strptime(curr_date, "%Y-%m-%d")
+                data.columns = pd.to_datetime(data.columns)
+                data = data.loc[:, data.columns <= cutoff]
+            except ValueError:
+                pass
+
         if data.empty:
+            if curr_date:
+                return f"No cash flow data found for symbol '{ticker}' before {curr_date}"
             return f"No cash flow data found for symbol '{ticker}'"
             
         # Convert to CSV string for consistency with other functions
@@ -402,6 +454,8 @@ def get_cashflow(
         
         # Add header information
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
+        if curr_date:
+            header += f"# As of: {curr_date}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         return header + csv_string
@@ -424,7 +478,17 @@ def get_income_statement(
         else:
             data = ticker_obj.income_stmt
             
+        if curr_date:
+            try:
+                cutoff = datetime.strptime(curr_date, "%Y-%m-%d")
+                data.columns = pd.to_datetime(data.columns)
+                data = data.loc[:, data.columns <= cutoff]
+            except ValueError:
+                pass
+
         if data.empty:
+            if curr_date:
+                return f"No income statement data found for symbol '{ticker}' before {curr_date}"
             return f"No income statement data found for symbol '{ticker}'"
             
         # Convert to CSV string for consistency with other functions
@@ -432,6 +496,8 @@ def get_income_statement(
         
         # Add header information
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
+        if curr_date:
+            header += f"# As of: {curr_date}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         
         return header + csv_string
