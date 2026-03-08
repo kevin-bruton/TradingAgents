@@ -79,7 +79,6 @@ progress_logger = configure_progress_logger()
 progress_tracker = ProgressTracker(progress_logger)
 ta = TradingAgentsGraph(debug=False, config=config, progress_callback=progress_tracker)
 
-symbols = ["AAPL", "MSFT", "GOOGL", "AMZN", "TSLA", "NVDA", "META", "F", "KO", "MCD"]
 trade_date = date.today().isoformat()
 positions_path = os.path.join(os.path.dirname(__file__), "current_positions.yaml")
 try:
@@ -93,7 +92,7 @@ def _format_level(level: float | None) -> str:
 
 decisions = {}
 # forward propagate
-for symbol in symbols:
+for symbol in current_positions.keys():
     print(f"\nProcessing {symbol}...")
     current_position = current_positions.get(symbol.upper())
     _, decision = ta.propagate(
