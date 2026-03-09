@@ -36,7 +36,12 @@ def _extract_json_block(full_signal: str) -> dict[str, Any]:
         raise ValueError(
             "Final trade decision output is empty; expected one fenced ```json``` block."
         )
-
+    # Remove all content before the first '{' and after the last '}' to handle cases where the model omits fences but includes a JSON-like structure.
+    full_signal = re.sub(r".*?\{", "{", full_signal, flags=re.DOTALL)
+    full_signal = re.sub(r"\}.*", "}", full_signal, flags=re.DOTALL)
+    full_signal = f"""```json
+{full_signal}
+```"""
     json_blocks = JSON_BLOCK_PATTERN.findall(full_signal)
     if not json_blocks:
         raise ValueError(
