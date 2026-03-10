@@ -51,6 +51,8 @@ class RiskDebateState(TypedDict):
 class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]
     trade_date: Annotated[str, "What date we are trading at"]
+    current_price: Annotated[str, "Current price of the stock"]
+    market_context: Annotated[dict, "Market data and indicators context"]
     current_position: Annotated[
         Optional[PositionConfig], "Current position information for the symbol"
     ]

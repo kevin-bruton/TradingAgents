@@ -11,13 +11,14 @@ def create_research_manager(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
         position_context = format_position_context(current_position)
         position_is_open = bool(current_position and current_position.get("open"))
 
         investment_debate_state = state["investment_debate_state"]
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}\n\nCurrent Price: {current_price}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
 
         past_memory_str = ""
@@ -47,6 +48,8 @@ Take into account your past mistakes on similar situations. Use these insights t
 
 Here are your past reflections on mistakes:
 \"{past_memory_str}\"
+
+Current Price: {current_price}
 
 Current position context:
 {position_context}

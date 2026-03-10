@@ -35,7 +35,7 @@ def create_fundamentals_analyst(llm):
                     " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
                     " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
                     " You have access to the following tools: {tool_names}.\n{system_message}"
-                    "For your reference, the current date is {current_date}. The company we want to look at is {ticker}",
+                    "For your reference, the current date is {current_date}. The company we want to look at is {ticker}. The current stock price is {current_price}.",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]
@@ -45,6 +45,7 @@ def create_fundamentals_analyst(llm):
         prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(ticker=ticker)
+        prompt = prompt.partial(current_price=state.get("current_price", "Unknown"))
 
         chain = prompt | llm.bind_tools(tools)
 

@@ -13,11 +13,12 @@ def create_trader(llm, memory):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
         position_context = format_position_context(current_position)
         position_is_open = bool(current_position and current_position.get("open"))
 
-        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}"
+        curr_situation = f"{market_research_report}\n\n{sentiment_report}\n\n{news_report}\n\n{fundamentals_report}\n\nCurrent Price: {current_price}"
         past_memories = memory.get_memories(curr_situation, n_matches=2)
 
         past_memory_str = ""
@@ -39,7 +40,7 @@ def create_trader(llm, memory):
 
         context = {
             "role": "user",
-            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n{position_context}\n\nPosition-aware requirements:\n{position_guidance}\n\nLeverage these insights to make an informed and strategic decision.",
+            "content": f"Based on a comprehensive analysis by a team of analysts, here is an investment plan tailored for {company_name}. This plan incorporates insights from current technical market trends, macroeconomic indicators, and social media sentiment. Use this plan as a foundation for evaluating your next trading decision.\n\nProposed Investment Plan: {investment_plan}\n\nCurrent Price: {current_price}\n\n{position_context}\n\nPosition-aware requirements:\n{position_guidance}\n\nLeverage these insights to make an informed and strategic decision.",
         }
 
         messages = [
