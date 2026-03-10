@@ -1,5 +1,5 @@
 from typing import Annotated
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 # Import from vendor-specific modules
 from .y_finance import (
@@ -118,11 +118,16 @@ def _parse_date(value: str):
         return None
 
 
-def _clamp_date(value: str, as_of_date: date) -> str:
+def _clamp_date(value: str, as_of_date: date, inclusive: bool = True) -> str:
     parsed = _parse_date(value)
     if not parsed:
         return value
-    return min(parsed, as_of_date).isoformat()
+
+    limit = as_of_date
+    if not inclusive:
+        limit = as_of_date + timedelta(days=1)
+
+    return min(parsed, limit).isoformat()
 
 
 def _apply_as_of_date(method: str, args: list, as_of_date: date):
@@ -137,7 +142,9 @@ def _apply_as_of_date(method: str, args: list, as_of_date: date):
 
     if method in {"get_stock_data", "get_news"} and len(args) >= 3:
         start_date = args[1]
-        end_date = _clamp_date(args[2], as_of_date)
+        # yfinance end_date is exclusive; allow clamping to as_of_date + 1
+        # so that data for as_of_date itself can be retrieved.
+        end_date = _clamp_date(args[2], as_of_date, inclusive=False)
         start_dt = _parse_date(start_date)
         end_dt = _parse_date(end_date)
         if start_dt and end_dt and start_dt > end_dt:

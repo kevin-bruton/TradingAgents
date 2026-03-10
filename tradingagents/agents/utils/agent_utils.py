@@ -28,13 +28,15 @@ def get_market_context(ticker: str, trade_date: str) -> dict:
     # Get current price from stock data first (and to potentially satisfy dependency for indicators)
     current_price = "Unknown"
     try:
-        # yfinance end_date is exclusive, so we add one day to get the trade_date's data
-        end_date = (datetime.strptime(trade_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+        # We want data for exactly trade_date.
+        # Note: the dataflow interface will handle vendor-specific end-date clamping/exclusivity
+        # based on as_of_date. We specify trade_date + 1 here to request the full day.
+        request_end = (datetime.strptime(trade_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
 
         stock_data_csv = get_stock_data.invoke({
             "symbol": ticker,
             "start_date": trade_date,
-            "end_date": end_date
+            "end_date": request_end
         })
 
         # Use pandas to find the last row's close price
