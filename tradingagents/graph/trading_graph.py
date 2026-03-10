@@ -18,6 +18,11 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.position_management import (
+    PositionConfig,
+    TradeDecision,
+    apply_trailing_stop_guardrail,
+)
 from tradingagents.dataflows.config import set_config
 
 # Import the new abstract tool methods from agent_utils
@@ -186,7 +191,12 @@ class TradingAgentsGraph:
             ),
         }
 
-    def propagate(self, company_name, trade_date):
+    def propagate(
+        self,
+        company_name,
+        trade_date,
+        current_position: Optional[PositionConfig] = None,
+    ):
         """Run the trading agents graph for a company on a specific date."""
 
         self.ticker = company_name
@@ -197,7 +207,7 @@ class TradingAgentsGraph:
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date
+            company_name, trade_date, current_position=current_position
         )
         args = self.propagator.get_graph_args()
 
@@ -219,17 +229,28 @@ class TradingAgentsGraph:
         # Store current state for reflection
         self.curr_state = final_state
 
+        parsed_decision = self.process_signal(final_state["final_trade_decision"])
+        guarded_decision = apply_trailing_stop_guardrail(
+            parsed_decision, final_state.get("current_position")
+        )
+
         # Log state
-        self._log_state(trade_date, final_state)
+        self._log_state(trade_date, final_state, guarded_decision)
 
         # Return decision and processed signal
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, guarded_decision
 
-    def _log_state(self, trade_date, final_state):
+    def _log_state(
+        self,
+        trade_date,
+        final_state,
+        parsed_trade_decision: TradeDecision,
+    ):
         """Log the final state to a JSON file."""
         self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
+            "current_position": final_state.get("current_position"),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
@@ -255,6 +276,7 @@ class TradingAgentsGraph:
             },
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
+            "parsed_trade_decision": parsed_trade_decision,
         }
 
         # Save to file
@@ -285,6 +307,6 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal):
-        """Process a signal to extract the core decision."""
+    def process_signal(self, full_signal: str) -> TradeDecision:
+        """Process a signal into a validated structured decision."""
         return self.signal_processor.process_signal(full_signal)

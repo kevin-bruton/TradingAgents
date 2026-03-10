@@ -1,0 +1,22 @@
+# Copy this file to current_positions.yaml before running run.py or main.py.
+# Each symbol entry must include:
+# - open: boolean
+# - stop_loss: number or null
+# - take_profit: number or null
+# - side: optional, currently only "long"
+
+AAPL:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+MSFT:
+  open: true
+  stop_loss: 385.0
+  take_profit: 430.0
+  side: long
+
+NVDA:
+  open: true
+  stop_loss: 112.5
+  take_profit: 145.0

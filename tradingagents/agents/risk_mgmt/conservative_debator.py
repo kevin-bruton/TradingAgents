@@ -2,6 +2,8 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from tradingagents.position_management.prompt_context import format_position_context
+
 
 def create_conservative_debator(llm):
     def conservative_node(state) -> dict:
@@ -16,20 +18,38 @@ def create_conservative_debator(llm):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_position = state.get("current_position")
+        position_context = format_position_context(current_position)
+        position_is_open = bool(current_position and current_position.get("open"))
 
         trader_decision = state["trader_investment_plan"]
 
-        prompt = f"""As the Conservative Risk Analyst, your primary objective is to protect assets, minimize volatility, and ensure steady, reliable growth. You prioritize stability, security, and risk mitigation, carefully assessing potential losses, economic downturns, and market volatility. When evaluating the trader's decision or plan, critically examine high-risk elements, pointing out where the decision may expose the firm to undue risk and where more cautious alternatives could secure long-term gains. Here is the trader's decision:
+        if position_is_open:
+            stop_guidance = """- Verify trailing-stop compliance: a revised stop_loss for an open long position must not be looser than the existing stop.
+- If the recommendation weakens stop protection, call it out as unacceptable downside risk."""
+        else:
+            stop_guidance = """- With no open position, verify that only BUY includes stop_loss/take_profit.
+- Treat HOLD/SELL with active stop/take levels as an inconsistency that should be corrected."""
+
+        prompt = f"""As the Conservative Risk Analyst, your primary objective is to protect assets, minimize volatility, and ensure steady, reliable growth. You prioritize stability, security, and risk mitigation, carefully assessing potential losses, economic downturns, and market volatility. When evaluating the trader's decision or plan, critically examine high-risk elements, pointing out where the decision may expose the firm to undue risk and where more cautious alternatives could secure long-term gains.
+
+Current position context:
+{position_context}
+
+Here is the trader's decision:
 
 {trader_decision}
 
-Your task is to actively counter the arguments of the Aggressive and Neutral Analysts, highlighting where their views may overlook potential threats or fail to prioritize sustainability. Respond directly to their points, drawing from the following data sources to build a convincing case for a low-risk approach adjustment to the trader's decision:
+Your task is to actively counter the arguments of the Aggressive and Neutral Analysts, highlighting where their views may overlook potential threats or fail to prioritize sustainability. You must explicitly critique stop-loss and take-profit quality (downside protection, realism, and reward-to-risk balance). Respond directly to their points, drawing from the following data sources to build a convincing case for a low-risk approach adjustment to the trader's decision:
 
 Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
 Latest World Affairs Report: {news_report}
 Company Fundamentals Report: {fundamentals_report}
 Here is the current conversation history: {history} Here is the last response from the aggressive analyst: {current_aggressive_response} Here is the last response from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints, do not hallucinate and just present your point.
+
+Position handling requirements:
+{stop_guidance}
 
 Engage by questioning their optimism and emphasizing the potential downsides they may have overlooked. Address each of their counterpoints to showcase why a conservative stance is ultimately the safest path for the firm's assets. Focus on debating and critiquing their arguments to demonstrate the strength of a low-risk strategy over their approaches. Output conversationally as if you are speaking without any special formatting."""
 

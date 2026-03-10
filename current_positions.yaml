@@ -1,0 +1,114 @@
+# Each symbol entry must include:
+# - open: boolean
+# - stop_loss: number or null
+# - take_profit: number or null
+# - side: optional, currently only "long"
+
+NVDA:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+WMT:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+XOM:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+LLY:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+JPM:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+NEE:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+NEM:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+TSLA:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+PLD:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+CAT:
+  open: false
+  stop_loss: null
+  take_profit: null
+
+#Prompt:
+#Give me five stocks that are uncorrelated as possible, but have a high profile in social media and news?
+#
+#Response:
+#Gemini said
+#To find a list of ten stocks that are both high-profile (heavy news and social media volume) and uncorrelated, the best strategy is to select "category leaders" from diverse sectors. Since these sectors respond to different economic drivers—interest rates, oil prices, consumer spending, or medical breakthroughs—their stock prices often move independently of one another.
+#
+#As of March 2026, here are ten US-listed stocks that command significant public attention while offering strong diversification benefits.
+#
+#1. NVIDIA (NVDA) | Information Technology
+#Why it's high profile: The undisputed poster child for the AI era. It dominates social media discussions and financial headlines daily.
+#
+#Correlation factor: Driven by AI infrastructure spending and data center demand. It often moves based on tech-specific sentiment rather than the broader "old economy."
+#
+#2. Walmart (WMT) | Consumer Staples
+#Why it's high profile: Frequent news coverage regarding US consumer health and inflation trends. It's a "retail king" with a massive social media presence for its e-commerce expansion.
+#
+#Correlation factor: As a defensive staple, it often thrives when people cut back on luxury spending, making it resilient during downturns that hurt tech.
+#
+#3. ExxonMobil (XOM) | Energy
+#Why it's high profile: A lightning rod for news on global oil prices, geopolitical tensions, and the energy transition.
+#
+#Correlation factor: Primarily moves with crude oil and gas prices. It often has a low or even negative correlation with tech stocks when high energy costs drag on the wider market.
+#
+#4. Eli Lilly (LLY) | Healthcare
+#Why it's high profile: Massive social media buzz around its weight-loss and diabetes drugs (Zepbound/Mounjaro), making it a retail favorite.
+#
+#Correlation factor: Moves on clinical trial results and FDA approvals. Health breakthroughs are idiosyncratic and rarely follow the path of the Nasdaq or interest rate cycles.
+#
+#5. JPMorgan Chase (JPM) | Financials
+#Why it's high profile: Led by Jamie Dimon, it is the primary source of news for banking stability and corporate earnings season.
+#
+#Correlation factor: Highly sensitive to the yield curve and interest rates. It often gains from "higher-for-longer" rate environments that can be detrimental to growth-heavy sectors.
+#
+#6. NextEra Energy (NEE) | Utilities
+#Why it's high profile: Frequently cited in news regarding the US power grid's ability to handle the AI data center boom and renewable energy targets.
+#
+#Correlation factor: Utilities are "bond proxies." They are highly sensitive to interest rate changes and act as a safe haven when volatility spikes in the broader market.
+#
+#7. Newmont (NEM) | Basic Materials
+#Why it's high profile: The leading US-listed gold miner. It gains attention whenever there is a "flight to safety" or concerns about the US dollar.
+#
+#Correlation factor: Driven by gold prices. It is one of the most uncorrelated assets to the S&P 500, often moving up when the currency or economy looks shaky.
+#
+#8. Tesla (TSLA) | Consumer Discretionary
+#Why it's high profile: Arguably the most talked-about stock on social media due to Elon Musk and its retail-heavy investor base.
+#
+#Correlation factor: While it has a high beta, its movements are often idiosyncratic—based on vehicle delivery numbers, FSD (Full Self-Driving) news, or Musk's own social media activity.
+#
+#9. Prologis (PLD) | Real Estate (REIT)
+#Why it's high profile: A bellwether for global trade and logistics; it owns the warehouses that power Amazon and other retail giants.
+#
+#Correlation factor: Driven by industrial occupancy rates and property values. Real estate often moves in its own cycle distinct from software or pharmaceuticals.
+#
+#10. Caterpillar (CAT) | Industrials
+#Why it's high profile: A key indicator for global infrastructure and mining health. When "big yellow machines" are selling, the industrial economy is moving.
+#
+#Correlation factor: Tied to global CAPEX and commodity cycles. It represents the "physical" economy, which can diverge significantly from the "digital" economy of the S&P 500.
