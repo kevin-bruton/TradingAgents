@@ -6,6 +6,8 @@ from pathlib import Path
 from prettytable import PrettyTable
 from datetime import date
 import os
+
+import yaml
 from cli.main import save_report_to_disk
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.position_management import load_current_positions
@@ -164,19 +166,23 @@ for symbol in current_positions.keys():
 
 table = PrettyTable()
 table.field_names = ["Symbol", "Decision", "Stop Loss", "Take Profit", "Confidence %"]
-
+summary = {}
 for symbol, decision in decisions.items():
-    table.add_row(
-        [
+    row = [
             symbol,
             decision["decision"],
             _format_level(decision["stop_loss"]),
             _format_level(decision["take_profit"]),
             f"{decision['confidence_pct']:.2f}",
         ]
-    )
+    table.add_row(row)
+    summary[symbol] = {k: v for k, v in decision.items() if k != "rationale"}
+
+table.sortby = "Confidence %"
 
 print(f"\nToday's Trading Decisions ({trade_date}):")
 print(table)
+with open(reports_root / "decision_table.yaml", "w") as f:
+    yaml.dump(summary, f, indent=4, default_flow_style=False)
 # Memorize mistakes and reflect
 # ta.reflect_and_remember(1000) # parameter is the position returns
