@@ -20,6 +20,7 @@ from tradingagents.agents.utils.news_data_tools import (
 )
 import pandas as pd
 import io
+from datetime import datetime, timedelta
 
 def get_market_context(ticker: str, trade_date: str) -> dict:
     """Fetch all necessary market data for the given ticker and date."""
@@ -27,10 +28,13 @@ def get_market_context(ticker: str, trade_date: str) -> dict:
     # Get current price from stock data first (and to potentially satisfy dependency for indicators)
     current_price = "Unknown"
     try:
+        # yfinance end_date is exclusive, so we add one day to get the trade_date's data
+        end_date = (datetime.strptime(trade_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
         stock_data_csv = get_stock_data.invoke({
             "symbol": ticker,
             "start_date": trade_date,
-            "end_date": trade_date
+            "end_date": end_date
         })
 
         # Use pandas to find the last row's close price
