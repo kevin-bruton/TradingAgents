@@ -17,6 +17,7 @@ def create_neutral_debator(llm):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
         position_context = format_position_context(current_position)
         position_is_open = bool(current_position and current_position.get("open"))
@@ -41,6 +42,7 @@ Here is the trader's decision:
 
 Your task is to challenge both the Aggressive and Conservative Analysts, pointing out where each perspective may be overly optimistic or overly cautious. You must explicitly assess stop-loss and take-profit quality, including whether the levels are balanced and executable. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:
 
+Current Price: {current_price}
 Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
 Latest World Affairs Report: {news_report}

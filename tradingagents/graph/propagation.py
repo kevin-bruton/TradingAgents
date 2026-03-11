@@ -20,6 +20,8 @@ class Propagator:
         self,
         company_name: str,
         trade_date: str,
+        current_price: str,
+        market_context: dict,
         current_position: Optional[PositionConfig] = None,
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
@@ -27,6 +29,8 @@ class Propagator:
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
+            "current_price": str(current_price),
+            "market_context": market_context,
             "current_position": current_position,
             "investment_debate_state": InvestDebateState(
                 {"history": "", "current_response": "", "count": 0}

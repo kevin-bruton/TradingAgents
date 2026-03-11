@@ -17,6 +17,7 @@ def create_aggressive_debator(llm):
         sentiment_report = state["sentiment_report"]
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
+        current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
         position_context = format_position_context(current_position)
         position_is_open = bool(current_position and current_position.get("open"))
@@ -41,6 +42,7 @@ Here is the trader's decision:
 
 Your task is to create a compelling case for the trader's decision by questioning and critiquing the conservative and neutral stances to demonstrate why your high-reward perspective offers the best path forward. You must explicitly evaluate stop-loss and take-profit quality (placement, reward-to-risk, and practical execution) while debating. Incorporate insights from the following sources into your arguments:
 
+Current Price: {current_price}
 Market Research Report: {market_research_report}
 Social Media Sentiment Report: {sentiment_report}
 Latest World Affairs Report: {news_report}

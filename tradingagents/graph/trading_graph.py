@@ -35,7 +35,8 @@ from tradingagents.agents.utils.agent_utils import (
     get_income_statement,
     get_news,
     get_insider_transactions,
-    get_global_news
+    get_global_news,
+    get_market_context
 )
 
 from .conditional_logic import ConditionalLogic
@@ -205,9 +206,16 @@ class TradingAgentsGraph:
         else:
             set_config(self.config)
 
+        # Pre-fetch market data and current price
+        market_info = get_market_context(company_name, str(trade_date))
+
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, current_position=current_position
+            company_name,
+            trade_date,
+            market_info["current_price"],
+            market_info["market_data"],
+            current_position=current_position
         )
         args = self.propagator.get_graph_args()
 
