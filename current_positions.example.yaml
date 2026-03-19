@@ -3,7 +3,8 @@
 # - open: boolean
 # - stop_loss: number or null
 # - take_profit: number or null
-# - side: optional, currently only "long"
+# - side: optional, "long" or "short" (defaults to "long")
+# Open positions must always include numeric stop_loss.
 
 AAPL:
   open: false
@@ -20,3 +21,9 @@ NVDA:
   open: true
   stop_loss: 112.5
   take_profit: 145.0
+
+TSLA:
+  open: true
+  stop_loss: 298.0
+  take_profit: 240.0
+  side: short

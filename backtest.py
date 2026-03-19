@@ -8,7 +8,7 @@ import logging
 import os
 import sys
 from datetime import date, datetime, timedelta
-from typing import Any, Mapping, Set
+from typing import Any, Mapping, Set, cast
 
 import pandas as pd
 from dotenv import load_dotenv
@@ -24,7 +24,15 @@ from pandas.tseries.holiday import (
     nearest_workday,
 )
 
-from tradingagents.position_management import PositionConfig, TradeDecision
+from tradingagents.position_management import (
+    ALL_DECISIONS,
+    PositionConfig,
+    PositionSide,
+    TradeDecision,
+    apply_decision_to_position,
+    normalize_position_mode,
+    validate_decision_for_position,
+)
 
 config = {
     "project_dir": os.path.abspath(os.path.join(os.path.dirname(__file__), ".")),
@@ -46,6 +54,8 @@ config = {
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,
+    # Position recommendation mode: "long_only" or "long_short"
+    "position_mode": "long_short",
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
@@ -91,17 +101,20 @@ CSV_FIELDNAMES = [
     "rationale",
 ]
 
-VALID_DECISIONS = {"BUY", "SELL", "HOLD"}
+VALID_DECISIONS = set(ALL_DECISIONS)
+LEGACY_DECISION_ALIASES = {"HOLD": "MODIFY"}
 
 POSITION_STATUS_OPEN = "OPEN"
 POSITION_STATUS_CLOSED = "CLOSED"
 POSITION_STATUS_CLOSED_SELL = "CLOSED_SELL"
+POSITION_STATUS_CLOSED_BUY_TO_COVER = "CLOSED_BUY_TO_COVER"
 POSITION_STATUS_CLOSED_STOP_LOSS = "CLOSED_STOP_LOSS"
 POSITION_STATUS_CLOSED_TAKE_PROFIT = "CLOSED_TAKE_PROFIT"
 
 CLOSED_POSITION_STATUSES = {
     POSITION_STATUS_CLOSED,
     POSITION_STATUS_CLOSED_SELL,
+    POSITION_STATUS_CLOSED_BUY_TO_COVER,
     POSITION_STATUS_CLOSED_STOP_LOSS,
     POSITION_STATUS_CLOSED_TAKE_PROFIT,
 }
@@ -161,8 +174,8 @@ def ensure_csv_writer(output_path: str) -> tuple[csv.DictWriter, "io.TextIOWrapp
     return writer, csv_file
 
 
-def _closed_position() -> PositionConfig:
-    return {"open": False, "stop_loss": None, "take_profit": None, "side": "long"}
+def _closed_position(side: PositionSide = "long") -> PositionConfig:
+    return {"open": False, "stop_loss": None, "take_profit": None, "side": side}
 
 
 def _clone_position(position: PositionConfig | None) -> PositionConfig:
@@ -172,7 +185,7 @@ def _clone_position(position: PositionConfig | None) -> PositionConfig:
         "open": bool(position.get("open")),
         "stop_loss": position.get("stop_loss"),
         "take_profit": position.get("take_profit"),
-        "side": "long",
+        "side": position.get("side", "long"),
     }
 
 
@@ -208,8 +221,10 @@ def _coerce_required_float(value: Any, field_name: str) -> float:
     return parsed
 
 
-def _normalize_decision_label(raw_decision: str) -> str:
+def _normalize_decision_label(raw_decision: str, *, allow_legacy_hold: bool = False) -> str:
     decision = raw_decision.strip().upper()
+    if allow_legacy_hold and decision in LEGACY_DECISION_ALIASES:
+        decision = LEGACY_DECISION_ALIASES[decision]
     if decision not in VALID_DECISIONS:
         raise ValueError(f"Decision must be one of {sorted(VALID_DECISIONS)}.")
     return decision
@@ -237,7 +252,7 @@ def _parse_decision_payload(raw_decision: Any) -> Mapping[str, Any] | None:
     return parsed
 
 
-def _extract_decision_label(raw_decision: Any) -> str:
+def _extract_decision_label(raw_decision: Any, *, allow_legacy_hold: bool = False) -> str:
     payload = _parse_decision_payload(raw_decision)
     if payload is not None:
         if "decision" not in payload:
@@ -245,11 +260,14 @@ def _extract_decision_label(raw_decision: Any) -> str:
         payload_decision = payload["decision"]
         if not isinstance(payload_decision, str):
             raise ValueError("Decision payload field 'decision' must be a string.")
-        return _normalize_decision_label(payload_decision)
+        return _normalize_decision_label(
+            payload_decision,
+            allow_legacy_hold=allow_legacy_hold,
+        )
 
     if not isinstance(raw_decision, str):
         raise ValueError("Decision value must be a string.")
-    return _normalize_decision_label(raw_decision)
+    return _normalize_decision_label(raw_decision, allow_legacy_hold=allow_legacy_hold)
 
 
 def _read_optional_level(
@@ -268,7 +286,12 @@ def _read_optional_level(
     return _coerce_optional_float(decision_payload[field_name], field_name)
 
 
-def normalize_live_decision(raw_decision: Any) -> TradeDecision:
+def normalize_live_decision(
+    raw_decision: Any,
+    *,
+    current_position: PositionConfig | None = None,
+    position_mode: str = "long_short",
+) -> TradeDecision:
     payload = _parse_decision_payload(raw_decision)
     if payload is None:
         if not isinstance(raw_decision, Mapping):
@@ -280,7 +303,7 @@ def normalize_live_decision(raw_decision: Any) -> TradeDecision:
     decision_raw = payload["decision"]
     if not isinstance(decision_raw, str):
         raise ValueError("Live decision field 'decision' must be a string.")
-    decision = _normalize_decision_label(decision_raw)
+    decision = _normalize_decision_label(decision_raw, allow_legacy_hold=False)
 
     stop_loss = _coerce_optional_float(payload.get("stop_loss"), "stop_loss")
     take_profit = _coerce_optional_float(payload.get("take_profit"), "take_profit")
@@ -292,40 +315,29 @@ def normalize_live_decision(raw_decision: Any) -> TradeDecision:
     if not isinstance(rationale_raw, str) or not rationale_raw.strip():
         raise ValueError("rationale must be a non-empty string.")
 
-    return {
+    normalized_decision: TradeDecision = {
         "decision": decision,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
         "confidence_pct": confidence_pct,
         "rationale": rationale_raw.strip(),
     }
+    normalized_mode = normalize_position_mode(position_mode)
+    validate_decision_for_position(normalized_decision, current_position, normalized_mode)
+    return normalized_decision
 
 
 def apply_decision_transition(
     current_position: PositionConfig,
     decision: TradeDecision,
+    *,
+    position_mode: str = "long_short",
 ) -> PositionConfig:
-    decision_label = decision["decision"]
-    if decision_label == "SELL":
-        return _closed_position()
-
-    if decision_label == "BUY":
-        return {
-            "open": True,
-            "stop_loss": (
-                decision["stop_loss"]
-                if decision["stop_loss"] is not None
-                else current_position.get("stop_loss")
-            ),
-            "take_profit": (
-                decision["take_profit"]
-                if decision["take_profit"] is not None
-                else current_position.get("take_profit")
-            ),
-            "side": "long",
-        }
-
-    return _clone_position(current_position)
+    return apply_decision_to_position(
+        current_position,
+        decision,
+        position_mode=position_mode,
+    )
 
 
 def apply_price_range_exits(
@@ -342,13 +354,20 @@ def apply_price_range_exits(
     if not current_position.get("open"):
         return _clone_position(current_position), None
 
+    side = current_position.get("side", "long")
     stop_loss = current_position.get("stop_loss")
-    if stop_loss is not None and day_low <= stop_loss:
-        return _closed_position(), "STOP_LOSS_HIT"
+    if stop_loss is not None:
+        if side == "long" and day_low <= stop_loss:
+            return _closed_position("long"), "STOP_LOSS_HIT"
+        if side == "short" and day_high >= stop_loss:
+            return _closed_position("short"), "STOP_LOSS_HIT"
 
     take_profit = current_position.get("take_profit")
-    if take_profit is not None and day_high >= take_profit:
-        return _closed_position(), "TAKE_PROFIT_HIT"
+    if take_profit is not None:
+        if side == "long" and day_high >= take_profit:
+            return _closed_position("long"), "TAKE_PROFIT_HIT"
+        if side == "short" and day_low <= take_profit:
+            return _closed_position("short"), "TAKE_PROFIT_HIT"
 
     return _clone_position(current_position), None
 
@@ -359,13 +378,21 @@ def simulate_position_day(
     *,
     day_low: float,
     day_high: float,
+    position_mode: str = "long_short",
 ) -> tuple[PositionConfig, str, str | None]:
-    transitioned_position = apply_decision_transition(current_position, decision)
+    transitioned_position = apply_decision_transition(
+        current_position,
+        decision,
+        position_mode=position_mode,
+    )
     if not transitioned_position.get("open"):
         if decision["decision"] == "SELL":
             return transitioned_position, POSITION_STATUS_CLOSED_SELL, None
+        if decision["decision"] == "BUY_TO_COVER":
+            return transitioned_position, POSITION_STATUS_CLOSED_BUY_TO_COVER, None
         return transitioned_position, POSITION_STATUS_CLOSED, None
 
+    open_side = transitioned_position.get("side", "long")
     final_position, trigger_reason = apply_price_range_exits(
         transitioned_position,
         day_low=day_low,
@@ -374,13 +401,15 @@ def simulate_position_day(
     if trigger_reason == "STOP_LOSS_HIT":
         note = (
             "SYSTEM NOTE: Stop-loss was triggered by historical range check "
-            f"(low={day_low:.2f}, high={day_high:.2f}); position closed."
+            f"(low={day_low:.2f}, high={day_high:.2f}) for the open {open_side} "
+            "position; position closed."
         )
         return final_position, POSITION_STATUS_CLOSED_STOP_LOSS, note
     if trigger_reason == "TAKE_PROFIT_HIT":
         note = (
             "SYSTEM NOTE: Take-profit was triggered by historical range check "
-            f"(low={day_low:.2f}, high={day_high:.2f}); position closed."
+            f"(low={day_low:.2f}, high={day_high:.2f}) for the open {open_side} "
+            "position; position closed."
         )
         return final_position, POSITION_STATUS_CLOSED_TAKE_PROFIT, note
 
@@ -390,14 +419,17 @@ def simulate_position_day(
 def advance_position_from_history_row(
     current_position: PositionConfig,
     history_row: Mapping[str, Any],
+    *,
+    position_mode: str = "long_short",
 ) -> PositionConfig:
+    normalized_mode = normalize_position_mode(position_mode)
     decision_payload = _parse_decision_payload(history_row.get("decision"))
     decision_source = (
         decision_payload.get("decision")
         if decision_payload is not None and "decision" in decision_payload
         else history_row.get("decision")
     )
-    decision_label = _extract_decision_label(decision_source)
+    decision_label = _extract_decision_label(decision_source, allow_legacy_hold=True)
     stop_loss = _read_optional_level(history_row, "stop_loss", decision_payload)
     take_profit = _read_optional_level(history_row, "take_profit", decision_payload)
 
@@ -407,34 +439,81 @@ def advance_position_from_history_row(
             raise ValueError("position_status must be a string when present.")
         status = raw_status.strip().upper()
         if status == POSITION_STATUS_OPEN:
-            return {
+            inferred_side = _infer_open_side(decision_label, current_position, history_row)
+            resolved_stop = (
+                stop_loss if stop_loss is not None else current_position.get("stop_loss")
+            )
+            if resolved_stop is None:
+                raise ValueError(
+                    "Open position history rows must provide stop_loss (or inherit one from prior state)."
+                )
+            open_position: PositionConfig = {
                 "open": True,
-                "stop_loss": stop_loss,
-                "take_profit": take_profit,
-                "side": "long",
+                "stop_loss": resolved_stop,
+                "take_profit": (
+                    take_profit
+                    if take_profit is not None
+                    else current_position.get("take_profit")
+                ),
+                "side": inferred_side,
             }
+            validate_decision_for_position(
+                {
+                    "decision": "MODIFY",
+                    "stop_loss": open_position["stop_loss"],
+                    "take_profit": open_position["take_profit"],
+                    "confidence_pct": 0.0,
+                    "rationale": "history sync",
+                },
+                open_position,
+                normalized_mode,
+            )
+            return open_position
         if status in CLOSED_POSITION_STATUSES:
-            return _closed_position()
+            return _closed_position(
+                _infer_closed_side(decision_label, current_position)
+            )
         raise ValueError(f"Unsupported position_status value '{raw_status}'.")
 
+    normalized_decision: TradeDecision = {
+        "decision": decision_label,
+        "stop_loss": stop_loss,
+        "take_profit": take_profit,
+        "confidence_pct": 0.0,
+        "rationale": "history sync",
+    }
+    validate_decision_for_position(normalized_decision, current_position, normalized_mode)
+    return apply_decision_transition(
+        current_position,
+        normalized_decision,
+        position_mode=normalized_mode,
+    )
+
+
+def _infer_open_side(
+    decision_label: str,
+    current_position: PositionConfig,
+    history_row: Mapping[str, Any],
+) -> PositionSide:
+    row_side = history_row.get("position_side")
+    if isinstance(row_side, str):
+        normalized_row_side = row_side.strip().lower()
+        if normalized_row_side in {"long", "short"}:
+            return cast(PositionSide, normalized_row_side)
+
+    if decision_label == "SELL_SHORT":
+        return "short"
     if decision_label == "BUY":
-        return {
-            "open": True,
-            "stop_loss": (
-                stop_loss
-                if stop_loss is not None
-                else current_position.get("stop_loss")
-            ),
-            "take_profit": (
-                take_profit
-                if take_profit is not None
-                else current_position.get("take_profit")
-            ),
-            "side": "long",
-        }
+        return "long"
+    return cast(PositionSide, current_position.get("side", "long"))
+
+
+def _infer_closed_side(decision_label: str, current_position: PositionConfig) -> PositionSide:
+    if decision_label == "BUY_TO_COVER":
+        return "short"
     if decision_label == "SELL":
-        return _closed_position()
-    return _clone_position(current_position)
+        return "long"
+    return cast(PositionSide, current_position.get("side", "long"))
 
 
 def build_backtest_row(
@@ -617,6 +696,7 @@ def main() -> None:
     ta = TradingAgentsGraph(debug=args.debug, config=config, progress_callback=progress_tracker)
     
     symbol = args.ticker.upper()
+    position_mode = normalize_position_mode(config.get("position_mode", "long_short"))
     backtest_folder = "backtests"
     os.makedirs(backtest_folder, exist_ok=True)
     backtest_file = os.path.join(backtest_folder, f"{symbol}.csv")
@@ -637,6 +717,7 @@ def main() -> None:
                     simulated_position = advance_position_from_history_row(
                         simulated_position,
                         existing_row,
+                        position_mode=position_mode,
                     )
                 except ValueError as exc:
                     raise SystemExit(
@@ -665,7 +746,11 @@ def main() -> None:
                     )
 
                 try:
-                    decision = normalize_live_decision(raw_decision)
+                    decision = normalize_live_decision(
+                        raw_decision,
+                        current_position=simulated_position,
+                        position_mode=position_mode,
+                    )
                 except ValueError as exc:
                     raise SystemExit(
                         f"Invalid structured decision for {symbol} on {iso_date}: {exc}"
@@ -676,6 +761,7 @@ def main() -> None:
                     decision,
                     day_low=day_low,
                     day_high=day_high,
+                    position_mode=position_mode,
                 )
 
                 output_row = build_backtest_row(

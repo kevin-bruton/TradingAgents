@@ -4,53 +4,63 @@
 # - take_profit: number or null
 # - side: optional, currently only "long"
 
-NVDA:
-  open: false
-  stop_loss: null
-  take_profit: null
+CAT:
+  open: true
+  side: short
+  stop_loss: 730
+  take_profit: 660
 
-WMT:
+JPM:
   open: false
-  stop_loss: null
-  take_profit: null
-
-XOM:
-  open: false
+  side: short
   stop_loss: null
   take_profit: null
 
 LLY:
   open: false
-  stop_loss: null
-  take_profit: null
-
-JPM:
-  open: false
+  side: short
   stop_loss: null
   take_profit: null
 
 NEE:
-  open: false
-  stop_loss: null
-  take_profit: null
+  open: true
+  side: short
+  stop_loss: 94.50
+  take_profit: 86.50
 
 NEM:
-  open: false
-  stop_loss: null
-  take_profit: null
+  open: true
+  side: short
+  stop_loss: 113.50
+  take_profit: 101.00
 
-TSLA:
-  open: false
-  stop_loss: null
-  take_profit: null
+NVDA:
+  open: true
+  side: long
+  stop_loss: 168
+  take_profit: 200
 
 PLD:
-  open: false
-  stop_loss: null
-  take_profit: null
+  open: true
+  side: short
+  stop_loss: 137
+  take_profit: 124
 
-CAT:
+TSLA:
+  open: true
+  side: short
+  stop_loss: 415
+  take_profit: 345
+
+WMT:
+  open: true
+  side: short
+  stop_loss: 126.50
+  take_profit: 112
+
+XOM:
   open: false
+  side: long
   stop_loss: null
   take_profit: null
 

@@ -2,7 +2,13 @@ import json
 import re
 from typing import Any
 
-from tradingagents.position_management.decision_schema import TradeDecision
+from tradingagents.position_management import (
+    ALL_DECISIONS,
+    PositionConfig,
+    TradeDecision,
+    normalize_position_mode,
+    validate_decision_for_position,
+)
 
 JSON_BLOCK_PATTERN = re.compile(
     r"```json\s*(.*?)\s*```",
@@ -15,7 +21,6 @@ REQUIRED_DECISION_KEYS = {
     "confidence_pct",
     "rationale",
 }
-VALID_DECISIONS = {"BUY", "SELL", "HOLD"}
 
 
 class SignalProcessor:
@@ -25,10 +30,20 @@ class SignalProcessor:
         # Kept for backward compatibility with existing graph construction.
         self.quick_thinking_llm = quick_thinking_llm
 
-    def process_signal(self, full_signal: str) -> TradeDecision:
+    def process_signal(
+        self,
+        full_signal: str,
+        *,
+        current_position: PositionConfig | None = None,
+        position_mode: str = "long_short",
+    ) -> TradeDecision:
         """Extract and validate exactly one structured decision JSON block."""
         decision_data = _extract_json_block(full_signal)
-        return _validate_decision_payload(decision_data)
+        return _validate_decision_payload(
+            decision_data,
+            current_position=current_position,
+            position_mode=position_mode,
+        )
 
 
 def _extract_json_block(full_signal: str) -> dict[str, Any]:
@@ -36,23 +51,24 @@ def _extract_json_block(full_signal: str) -> dict[str, Any]:
         raise ValueError(
             "Final trade decision output is empty; expected one fenced ```json``` block."
         )
-    # Remove all content before the first '{' and after the last '}' to handle cases where the model omits fences but includes a JSON-like structure.
-    full_signal = re.sub(r".*?\{", "{", full_signal, flags=re.DOTALL)
-    full_signal = re.sub(r"\}.*", "}", full_signal, flags=re.DOTALL)
-    full_signal = f"""```json
-{full_signal}
-```"""
+
     json_blocks = JSON_BLOCK_PATTERN.findall(full_signal)
-    if not json_blocks:
-        raise ValueError(
-            "No fenced ```json``` block found in final trade decision output."
-        )
     if len(json_blocks) > 1:
         raise ValueError(
             f"Expected exactly one fenced ```json``` block, found {len(json_blocks)}."
         )
 
-    block = json_blocks[0].strip()
+    if json_blocks:
+        block = json_blocks[0].strip()
+    else:
+        start_idx = full_signal.find("{")
+        end_idx = full_signal.rfind("}")
+        if start_idx == -1 or end_idx <= start_idx:
+            raise ValueError(
+                "No fenced ```json``` block found in final trade decision output."
+            )
+        block = full_signal[start_idx : end_idx + 1].strip()
+
     try:
         parsed = json.loads(block)
     except json.JSONDecodeError as exc:
@@ -64,7 +80,12 @@ def _extract_json_block(full_signal: str) -> dict[str, Any]:
     return parsed
 
 
-def _validate_decision_payload(payload: dict[str, Any]) -> TradeDecision:
+def _validate_decision_payload(
+    payload: dict[str, Any],
+    *,
+    current_position: PositionConfig | None,
+    position_mode: str,
+) -> TradeDecision:
     missing_keys = sorted(REQUIRED_DECISION_KEYS.difference(payload.keys()))
     if missing_keys:
         missing = ", ".join(missing_keys)
@@ -74,9 +95,9 @@ def _validate_decision_payload(payload: dict[str, Any]) -> TradeDecision:
     if not isinstance(decision_raw, str):
         raise ValueError("Structured decision field 'decision' must be a string.")
     decision = decision_raw.strip().upper()
-    if decision not in VALID_DECISIONS:
+    if decision not in ALL_DECISIONS:
         raise ValueError(
-            f"Structured decision field 'decision' must be one of {sorted(VALID_DECISIONS)}."
+            f"Structured decision field 'decision' must be one of {sorted(ALL_DECISIONS)}."
         )
 
     stop_loss = _parse_optional_number(payload["stop_loss"], "stop_loss")
@@ -94,13 +115,16 @@ def _validate_decision_payload(payload: dict[str, Any]) -> TradeDecision:
     if not rationale:
         raise ValueError("Structured decision field 'rationale' cannot be empty.")
 
-    return {
+    parsed_decision: TradeDecision = {
         "decision": decision,
         "stop_loss": stop_loss,
         "take_profit": take_profit,
         "confidence_pct": confidence_pct,
         "rationale": rationale,
     }
+    normalized_mode = normalize_position_mode(position_mode)
+    validate_decision_for_position(parsed_decision, current_position, normalized_mode)
+    return parsed_decision
 
 
 def _parse_optional_number(value: Any, field_name: str) -> float | None:

@@ -20,8 +20,11 @@ from tradingagents.agents.utils.agent_states import (
 )
 from tradingagents.position_management import (
     PositionConfig,
+    PositionMode,
     TradeDecision,
     apply_trailing_stop_guardrail,
+    normalize_position_mode,
+    validate_position_for_mode,
 )
 from tradingagents.dataflows.config import set_config
 
@@ -208,14 +211,24 @@ class TradingAgentsGraph:
 
         # Pre-fetch market data and current price
         market_info = get_market_context(company_name, str(trade_date))
+        position_mode: PositionMode = normalize_position_mode(
+            self.config.get("position_mode", "long_short")
+        )
+        validate_position_for_mode(current_position, position_mode)
+        current_price = market_info["current_price"]
+        try:
+            current_price_value = float(current_price)
+        except (TypeError, ValueError):
+            current_price_value = None
 
         # Initialize state
         init_agent_state = self.propagator.create_initial_state(
             company_name,
             trade_date,
-            market_info["current_price"],
+            current_price,
             market_info["market_data"],
-            current_position=current_position
+            current_position=current_position,
+            position_mode=position_mode,
         )
         args = self.propagator.get_graph_args()
 
@@ -237,9 +250,15 @@ class TradingAgentsGraph:
         # Store current state for reflection
         self.curr_state = final_state
 
-        parsed_decision = self.process_signal(final_state["final_trade_decision"])
+        parsed_decision = self.process_signal(
+            final_state["final_trade_decision"],
+            current_position=final_state.get("current_position"),
+            position_mode=final_state.get("position_mode", position_mode),
+        )
         guarded_decision = apply_trailing_stop_guardrail(
-            parsed_decision, final_state.get("current_position")
+            parsed_decision,
+            final_state.get("current_position"),
+            current_price=current_price_value,
         )
 
         # Log state
@@ -259,6 +278,7 @@ class TradingAgentsGraph:
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
             "current_position": final_state.get("current_position"),
+            "position_mode": final_state.get("position_mode"),
             "market_report": final_state["market_report"],
             "sentiment_report": final_state["sentiment_report"],
             "news_report": final_state["news_report"],
@@ -315,6 +335,16 @@ class TradingAgentsGraph:
             self.curr_state, returns_losses, self.risk_manager_memory
         )
 
-    def process_signal(self, full_signal: str) -> TradeDecision:
+    def process_signal(
+        self,
+        full_signal: str,
+        *,
+        current_position: Optional[PositionConfig] = None,
+        position_mode: str = "long_short",
+    ) -> TradeDecision:
         """Process a signal into a validated structured decision."""
-        return self.signal_processor.process_signal(full_signal)
+        return self.signal_processor.process_signal(
+            full_signal,
+            current_position=current_position,
+            position_mode=position_mode,
+        )

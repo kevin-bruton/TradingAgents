@@ -10,7 +10,13 @@ import os
 import yaml
 from cli.main import save_report_to_disk
 from tradingagents.graph.trading_graph import TradingAgentsGraph
-from tradingagents.position_management import load_current_positions
+from tradingagents.position_management import (
+    apply_decision_to_position,
+    load_current_positions,
+    normalize_position_mode,
+    save_current_positions,
+    validate_position_for_mode,
+)
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -36,6 +42,8 @@ config = {
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,
+    # Position recommendation mode: "long_only" or "long_short"
+    "position_mode": "long_short",
     # Data vendor configuration
     # Category-level configuration (default for all tools in category)
     "data_vendors": {
@@ -93,6 +101,12 @@ try:
     current_positions = load_current_positions(positions_path)
 except (FileNotFoundError, ValueError) as exc:
     raise SystemExit(str(exc)) from exc
+position_mode = normalize_position_mode(config.get("position_mode", "long_short"))
+for symbol, current_position in current_positions.items():
+    try:
+        validate_position_for_mode(current_position, position_mode)
+    except ValueError as exc:
+        raise SystemExit(f"Invalid current position for '{symbol}': {exc}") from exc
 
 
 def _format_level(level: float | None) -> str:
@@ -116,6 +130,7 @@ def _is_structured_decision_parse_error(error: ValueError) -> bool:
 
 
 decisions = {}
+updated_positions = {}
 # forward propagate
 for symbol in current_positions.keys():
     symbol_key = symbol.upper()
@@ -149,6 +164,14 @@ for symbol in current_positions.keys():
         decision = _build_parse_error_decision(str(exc))
 
     decisions[symbol_key] = decision
+    if decision["decision"] == "PARSE_ERROR":
+        updated_positions[symbol_key] = current_position
+    else:
+        updated_positions[symbol_key] = apply_decision_to_position(
+            current_position,
+            decision,
+            position_mode=position_mode,
+        )
     symbol_report_dir = reports_root / symbol_key
     save_report_to_disk(
         final_state,
@@ -176,13 +199,19 @@ for symbol, decision in decisions.items():
             f"{decision['confidence_pct']:.2f}",
         ]
     table.add_row(row)
-    summary[symbol] = {k: v for k, v in decision.items() if k != "rationale"}
 
-table.sortby = "Confidence %"
+table.sortby = "Symbol"
+
+for symbol in sorted(decisions.keys()):
+    summary[symbol] = {k: v for k, v in decisions[symbol].items() if k != "rationale"}
 
 print(f"\nToday's Trading Decisions ({trade_date}):")
 print(table)
 with open(reports_root / "decision_table.yaml", "w") as f:
     yaml.dump(summary, f, indent=4, default_flow_style=False)
+
+positions_output_path = Path(config["project_dir"]) / "current_positions.updated.yaml"
+save_current_positions(positions_output_path, updated_positions)
+print(f"Saved updated positions to {positions_output_path}")
 # Memorize mistakes and reflect
 # ta.reflect_and_remember(1000) # parameter is the position returns

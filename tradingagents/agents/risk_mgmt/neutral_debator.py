@@ -1,6 +1,10 @@
 import time
 import json
 
+from tradingagents.position_management import (
+    POSITION_MODE_LONG_ONLY,
+    normalize_position_mode,
+)
 from tradingagents.position_management.prompt_context import format_position_context
 
 
@@ -19,17 +23,29 @@ def create_neutral_debator(llm):
         fundamentals_report = state["fundamentals_report"]
         current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
-        position_context = format_position_context(current_position)
+        position_mode = normalize_position_mode(state.get("position_mode", "long_short"))
+        position_context = format_position_context(current_position, position_mode)
         position_is_open = bool(current_position and current_position.get("open"))
+        position_side = str(current_position.get("side", "long")) if current_position else "long"
 
         trader_decision = state["trader_investment_plan"]
 
-        if position_is_open:
-            stop_guidance = """- Evaluate trailing-stop compliance for open long exposure and call out any loosening of stop_loss as non-compliant.
-- Assess whether stop_loss/take_profit still fit the current thesis and volatility environment."""
+        if position_mode == POSITION_MODE_LONG_ONLY:
+            if position_is_open:
+                stop_guidance = """- Evaluate whether SELL vs MODIFY is appropriate for the open long position.
+- For MODIFY, ensure stop_loss remains numeric and risk protection is not loosened."""
+            else:
+                stop_guidance = """- With no open long position, only BUY is coherent.
+- BUY must include numeric stop_loss."""
+        elif not position_is_open:
+            stop_guidance = """- With no open exposure, only BUY or SELL_SHORT should be proposed.
+- Entry actions must include numeric stop_loss."""
+        elif position_side == "long":
+            stop_guidance = """- With an open long position, only SELL or MODIFY is coherent.
+- For MODIFY, ensure stop_loss remains numeric and does not loosen."""
         else:
-            stop_guidance = """- With no open exposure, ensure stop_loss/take_profit are only present for BUY decisions.
-- Flag HOLD/SELL proposals that include active stop_loss/take_profit as incoherent."""
+            stop_guidance = """- With an open short position, only BUY_TO_COVER or MODIFY is coherent.
+- For MODIFY, ensure stop_loss remains numeric and does not loosen."""
 
         prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.
 

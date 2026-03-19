@@ -1,9 +1,9 @@
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, cast
 
 import yaml
 
-from .schema import PositionConfig, PositionMap
+from .schema import PositionConfig, PositionMap, PositionSide
 
 
 def load_current_positions(path: str | Path) -> PositionMap:
@@ -47,6 +47,40 @@ def load_current_positions(path: str | Path) -> PositionMap:
     return normalized_positions
 
 
+def save_current_positions(path: str | Path, positions: PositionMap) -> None:
+    """Validate and persist current position data to YAML."""
+    positions_path = Path(path)
+    if positions_path.exists() and not positions_path.is_file():
+        raise ValueError(f"Current positions path must be a file: {positions_path}")
+
+    if not isinstance(positions, dict):
+        raise ValueError("Positions payload must be a mapping of symbol to position.")
+
+    normalized_positions: PositionMap = {}
+    for raw_symbol, raw_position in positions.items():
+        if not isinstance(raw_symbol, str):
+            raise ValueError(
+                f"Position symbol keys must be strings. Found key {raw_symbol!r}."
+            )
+
+        symbol = raw_symbol.strip().upper()
+        if not symbol:
+            raise ValueError("Position symbol keys cannot be empty.")
+        if symbol in normalized_positions:
+            raise ValueError(f"Duplicate symbol after normalization: '{symbol}'.")
+
+        normalized_positions[symbol] = _normalize_position(symbol, raw_position)
+
+    positions_path.parent.mkdir(parents=True, exist_ok=True)
+    with positions_path.open("w", encoding="utf-8") as positions_file:
+        yaml.safe_dump(
+            normalized_positions,
+            positions_file,
+            default_flow_style=False,
+            sort_keys=True,
+        )
+
+
 def _normalize_position(symbol: str, raw_position: Any) -> PositionConfig:
     if not isinstance(raw_position, dict):
         raise ValueError(f"Position entry for '{symbol}' must be a mapping.")
@@ -63,6 +97,11 @@ def _normalize_position(symbol: str, raw_position: Any) -> PositionConfig:
     stop_loss = _require_price_or_none(symbol, raw_position, "stop_loss")
     take_profit = _require_price_or_none(symbol, raw_position, "take_profit")
     side = _normalize_side(symbol, raw_position.get("side", "long"))
+
+    if open_position and stop_loss is None:
+        raise ValueError(
+            f"Position entry for '{symbol}' is open but missing numeric stop_loss."
+        )
 
     return {
         "open": open_position,
@@ -101,13 +140,14 @@ def _require_price_or_none(
     return float(value)
 
 
-def _normalize_side(symbol: str, side_value: Any) -> Literal["long"]:
+def _normalize_side(symbol: str, side_value: Any) -> PositionSide:
     if not isinstance(side_value, str):
         raise ValueError(f"Position field 'side' for '{symbol}' must be a string.")
 
     normalized_side = side_value.strip().lower()
-    if normalized_side != "long":
+    if normalized_side not in {"long", "short"}:
         raise ValueError(
-            f"Position field 'side' for '{symbol}' must be 'long'. Found '{side_value}'."
+            "Position field 'side' for "
+            f"'{symbol}' must be 'long' or 'short'. Found '{side_value}'."
         )
-    return "long"
+    return cast(PositionSide, normalized_side)

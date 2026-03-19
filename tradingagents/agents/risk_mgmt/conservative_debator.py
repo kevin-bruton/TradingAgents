@@ -2,6 +2,10 @@ from langchain_core.messages import AIMessage
 import time
 import json
 
+from tradingagents.position_management import (
+    POSITION_MODE_LONG_ONLY,
+    normalize_position_mode,
+)
 from tradingagents.position_management.prompt_context import format_position_context
 
 
@@ -20,17 +24,29 @@ def create_conservative_debator(llm):
         fundamentals_report = state["fundamentals_report"]
         current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
-        position_context = format_position_context(current_position)
+        position_mode = normalize_position_mode(state.get("position_mode", "long_short"))
+        position_context = format_position_context(current_position, position_mode)
         position_is_open = bool(current_position and current_position.get("open"))
+        position_side = str(current_position.get("side", "long")) if current_position else "long"
 
         trader_decision = state["trader_investment_plan"]
 
-        if position_is_open:
-            stop_guidance = """- Verify trailing-stop compliance: a revised stop_loss for an open long position must not be looser than the existing stop.
-- If the recommendation weakens stop protection, call it out as unacceptable downside risk."""
+        if position_mode == POSITION_MODE_LONG_ONLY:
+            if position_is_open:
+                stop_guidance = """- Verify SELL vs MODIFY coherence for the open long position.
+- For MODIFY, ensure stop_loss remains numeric and protection is not loosened."""
+            else:
+                stop_guidance = """- With no open long position, only BUY is valid.
+- BUY must include numeric stop_loss."""
+        elif not position_is_open:
+            stop_guidance = """- With no open exposure, only BUY or SELL_SHORT should be proposed.
+- Entry actions must include numeric stop_loss."""
+        elif position_side == "long":
+            stop_guidance = """- With an open long position, only SELL or MODIFY is coherent.
+- For MODIFY, ensure stop_loss remains numeric and does not loosen."""
         else:
-            stop_guidance = """- With no open position, verify that only BUY includes stop_loss/take_profit.
-- Treat HOLD/SELL with active stop/take levels as an inconsistency that should be corrected."""
+            stop_guidance = """- With an open short position, only BUY_TO_COVER or MODIFY is coherent.
+- For MODIFY, ensure stop_loss remains numeric and does not loosen."""
 
         prompt = f"""As the Conservative Risk Analyst, your primary objective is to protect assets, minimize volatility, and ensure steady, reliable growth. You prioritize stability, security, and risk mitigation, carefully assessing potential losses, economic downturns, and market volatility. When evaluating the trader's decision or plan, critically examine high-risk elements, pointing out where the decision may expose the firm to undue risk and where more cautious alternatives could secure long-term gains.
 

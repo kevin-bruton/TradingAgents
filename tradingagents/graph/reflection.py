@@ -33,7 +33,7 @@ Your goal is to deliver detailed insights into investment decisions and highligh
 
 2. Improvement:
    - For any incorrect decisions, propose revisions to maximize returns.
-   - Provide a detailed list of corrective actions or improvements, including specific recommendations (e.g., changing a decision from HOLD to BUY on a particular date).
+   - Provide a detailed list of corrective actions or improvements, including specific recommendations (e.g., changing a decision from MODIFY to BUY on a particular date).
 
 3. Summary:
    - Summarize the lessons learned from the successes and mistakes.

@@ -31,13 +31,14 @@ Each symbol maps to:
 open: <bool>                 # required
 stop_loss: <number | null>   # required
 take_profit: <number | null> # required
-side: "long"                 # optional, defaults to "long" (long-only for now)
+side: "long" | "short"       # optional, defaults to "long"
 ```
 
 Notes:
 - `open` must be a YAML boolean (`true`/`false`).
 - `stop_loss` and `take_profit` must be numeric or `null`.
-- `side` currently supports only `"long"`.
+- `side` supports `"long"` and `"short"`.
+- If `open: true`, `stop_loss` must be numeric (all open positions require stop protection).
 - Omitting a symbol is allowed; that symbol is treated as "no current position data provided."
 
 ## 2) Example template
@@ -55,6 +56,12 @@ AAPL:
   open: false
   stop_loss: null
   take_profit: null
+
+TSLA:
+  open: true
+  stop_loss: 298.0
+  take_profit: 240.0
+  side: short
 ```
 
 ## 3) Structured decision contract
@@ -63,7 +70,7 @@ The final risk-manager output must include exactly one fenced `json` block. It i
 
 ```json
 {
-  "decision": "BUY | SELL | HOLD",
+  "decision": "BUY | SELL | SELL_SHORT | BUY_TO_COVER | MODIFY",
   "stop_loss": "<number|null>",
   "take_profit": "<number|null>",
   "confidence_pct": "<0..100 number>",
@@ -72,30 +79,33 @@ The final risk-manager output must include exactly one fenced `json` block. It i
 ```
 
 Validation highlights:
-- `decision` must be uppercase `BUY`, `SELL`, or `HOLD`.
+- `decision` must be uppercase and valid for configured `position_mode`:
+  - `long_only`: `BUY`, `SELL`, `MODIFY`
+  - `long_short`: `BUY`, `SELL`, `SELL_SHORT`, `BUY_TO_COVER`, `MODIFY`
 - `confidence_pct` must be numeric within `[0, 100]`.
 - `rationale` must be a non-empty string.
+- Action/position coherence is enforced (e.g., cannot `SELL` with no open long, cannot `BUY_TO_COVER` with no open short).
 
 ## 4) Trailing-stop guardrail behavior
 
-After structured parsing, a trailing-stop guardrail is applied for open long positions:
+After structured parsing, a trailing-stop guardrail is applied for open positions:
 
 - Guardrail applies only when:
   - current position is open
-  - side is `long`
-  - an existing `stop_loss` is present
-  - decision is not `SELL`
-- For open long positions, `BUY`/`HOLD` with `stop_loss: null` is rejected (explicit error).
+  - decision is not a close action (`SELL` / `BUY_TO_COVER`)
 - If the proposed stop-loss is looser than the existing stop, it is clamped back to the existing level.
 - A `SYSTEM WARNING:` line is appended to `rationale` when clamping occurs.
 
-Current runtime behavior in `TradingAgentsGraph.propagate(...)` applies guardrails without a `current_price` argument, so "looser" is evaluated by absolute level for long positions (`proposed_stop < existing_stop`).
+Guardrail tightening is side-aware:
+- long: lower stop can be looser
+- short: higher stop can be looser
 
 ## 5) Runtime and output surfaces
 
 ### `run.py` (multi-symbol script)
 - Loads `current_positions.yaml` at startup.
 - Passes per-symbol `current_position` into `ta.propagate(...)`.
+- Applies structured decisions to next position state and saves output to `current_positions.updated.yaml`.
 - Prints and tables these structured fields:
   - `decision`
   - `stop_loss`
@@ -105,6 +115,7 @@ Current runtime behavior in `TradingAgentsGraph.propagate(...)` applies guardrai
 ### `main.py` (single-symbol script)
 - Loads `current_positions.yaml` at startup.
 - Passes the symbol position into `ta.propagate(...)`.
+- Applies the structured decision and saves output to `current_positions.updated.yaml`.
 - Prints:
   - `decision`, `stop_loss`, `take_profit`, `confidence_pct`, `rationale`
 
@@ -128,6 +139,7 @@ Current runtime behavior in `TradingAgentsGraph.propagate(...)` applies guardrai
 - `OPEN`
 - `CLOSED`
 - `CLOSED_SELL`
+- `CLOSED_BUY_TO_COVER`
 - `CLOSED_STOP_LOSS`
 - `CLOSED_TAKE_PROFIT`
 

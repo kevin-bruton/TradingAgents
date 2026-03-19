@@ -190,6 +190,7 @@ config["llm_provider"] = "openai"        # openai, google, anthropic, xai, openr
 config["deep_think_llm"] = "gpt-5.2"     # Model for complex reasoning
 config["quick_think_llm"] = "gpt-5-mini" # Model for quick tasks
 config["max_debate_rounds"] = 2
+config["position_mode"] = "long_only"    # "long_only" or "long_short"
 
 ta = TradingAgentsGraph(debug=True, config=config)
 _, decision = ta.propagate("NVDA", "2026-01-15")
@@ -223,6 +224,17 @@ Structured decisions now include:
 - `take_profit`
 - `confidence_pct`
 - `rationale`
+
+Recommendation semantics:
+- `BUY`: open long
+- `SELL`: close long
+- `SELL_SHORT`: open short (only in `long_short` mode)
+- `BUY_TO_COVER`: close short (only in `long_short` mode)
+- `MODIFY`: update stop loss and/or take profit for an open position
+
+All open positions must have a numeric `stop_loss`.
+
+`run.py` and `main.py` now persist post-decision positions to `current_positions.updated.yaml`, while keeping `current_positions.yaml` as input-only.
 
 For full schema details (`current_positions.yaml`), guardrail behavior, and output expectations, see `docs/position_management_evaluation.md`.
 

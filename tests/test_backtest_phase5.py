@@ -1,6 +1,7 @@
 import unittest
 
 from backtest import (
+    POSITION_STATUS_CLOSED_BUY_TO_COVER,
     POSITION_STATUS_CLOSED_SELL,
     POSITION_STATUS_CLOSED_STOP_LOSS,
     POSITION_STATUS_CLOSED_TAKE_PROFIT,
@@ -20,11 +21,17 @@ class BacktestLifecycleTests(unittest.TestCase):
             "take_profit": None,
             "side": "long",
         }
-        self.open_position = {
+        self.open_long_position = {
             "open": True,
             "stop_loss": 100.0,
             "take_profit": 120.0,
             "side": "long",
+        }
+        self.open_short_position = {
+            "open": True,
+            "stop_loss": 125.0,
+            "take_profit": 95.0,
+            "side": "short",
         }
 
     def test_apply_decision_transition_buy_opens_position(self) -> None:
@@ -39,10 +46,30 @@ class BacktestLifecycleTests(unittest.TestCase):
         updated = apply_decision_transition(self.closed_position, decision)
 
         self.assertTrue(updated["open"])
+        self.assertEqual(updated["side"], "long")
         self.assertEqual(updated["stop_loss"], 98.5)
         self.assertEqual(updated["take_profit"], 130.0)
 
-    def test_apply_decision_transition_sell_closes_position(self) -> None:
+    def test_apply_decision_transition_sell_short_opens_short(self) -> None:
+        decision = {
+            "decision": "SELL_SHORT",
+            "stop_loss": 126.0,
+            "take_profit": 92.0,
+            "confidence_pct": 67.0,
+            "rationale": "Open short on downside momentum.",
+        }
+
+        updated = apply_decision_transition(
+            self.closed_position,
+            decision,
+            position_mode="long_short",
+        )
+
+        self.assertTrue(updated["open"])
+        self.assertEqual(updated["side"], "short")
+        self.assertEqual(updated["stop_loss"], 126.0)
+
+    def test_apply_decision_transition_sell_closes_long_position(self) -> None:
         decision = {
             "decision": "SELL",
             "stop_loss": None,
@@ -51,15 +78,34 @@ class BacktestLifecycleTests(unittest.TestCase):
             "rationale": "Exit on trend reversal.",
         }
 
-        updated = apply_decision_transition(self.open_position, decision)
+        updated = apply_decision_transition(self.open_long_position, decision)
 
         self.assertFalse(updated["open"])
+        self.assertEqual(updated["side"], "long")
         self.assertIsNone(updated["stop_loss"])
         self.assertIsNone(updated["take_profit"])
 
+    def test_apply_decision_transition_buy_to_cover_closes_short_position(self) -> None:
+        decision = {
+            "decision": "BUY_TO_COVER",
+            "stop_loss": None,
+            "take_profit": None,
+            "confidence_pct": 65.0,
+            "rationale": "Close short as risk/reward weakens.",
+        }
+
+        updated = apply_decision_transition(
+            self.open_short_position,
+            decision,
+            position_mode="long_short",
+        )
+
+        self.assertFalse(updated["open"])
+        self.assertEqual(updated["side"], "short")
+
     def test_apply_price_range_exits_prioritizes_stop_loss(self) -> None:
         updated, reason = apply_price_range_exits(
-            self.open_position,
+            self.open_long_position,
             day_low=99.0,
             day_high=121.0,
         )
@@ -97,7 +143,7 @@ class BacktestLifecycleTests(unittest.TestCase):
         }
 
         updated, status, note = simulate_position_day(
-            self.open_position,
+            self.open_long_position,
             decision,
             day_low=102.0,
             day_high=108.0,
@@ -105,6 +151,27 @@ class BacktestLifecycleTests(unittest.TestCase):
 
         self.assertFalse(updated["open"])
         self.assertEqual(status, POSITION_STATUS_CLOSED_SELL)
+        self.assertIsNone(note)
+
+    def test_simulate_position_day_returns_closed_buy_to_cover_status(self) -> None:
+        decision = {
+            "decision": "BUY_TO_COVER",
+            "stop_loss": None,
+            "take_profit": None,
+            "confidence_pct": 62.0,
+            "rationale": "Close short before squeeze risk.",
+        }
+
+        updated, status, note = simulate_position_day(
+            self.open_short_position,
+            decision,
+            day_low=100.0,
+            day_high=112.0,
+            position_mode="long_short",
+        )
+
+        self.assertFalse(updated["open"])
+        self.assertEqual(status, POSITION_STATUS_CLOSED_BUY_TO_COVER)
         self.assertIsNone(note)
 
     def test_advance_position_from_history_row_parses_legacy_payload(self) -> None:
@@ -133,15 +200,28 @@ class BacktestLifecycleTests(unittest.TestCase):
             "position_status": POSITION_STATUS_CLOSED_STOP_LOSS,
         }
 
-        updated = advance_position_from_history_row(self.open_position, history_row)
+        updated = advance_position_from_history_row(self.open_long_position, history_row)
 
         self.assertFalse(updated["open"])
         self.assertIsNone(updated["stop_loss"])
         self.assertIsNone(updated["take_profit"])
 
+    def test_advance_position_from_history_row_maps_legacy_hold_to_modify(self) -> None:
+        history_row = {
+            "decision": "HOLD",
+            "stop_loss": None,
+            "take_profit": 122.0,
+            "position_status": None,
+        }
+
+        updated = advance_position_from_history_row(self.open_long_position, history_row)
+        self.assertTrue(updated["open"])
+        self.assertEqual(updated["stop_loss"], 100.0)
+        self.assertEqual(updated["take_profit"], 122.0)
+
     def test_simulate_position_day_keeps_open_without_trigger(self) -> None:
         decision = {
-            "decision": "HOLD",
+            "decision": "MODIFY",
             "stop_loss": None,
             "take_profit": None,
             "confidence_pct": 55.0,
@@ -149,7 +229,7 @@ class BacktestLifecycleTests(unittest.TestCase):
         }
 
         updated, status, note = simulate_position_day(
-            self.open_position,
+            self.open_long_position,
             decision,
             day_low=101.0,
             day_high=119.0,

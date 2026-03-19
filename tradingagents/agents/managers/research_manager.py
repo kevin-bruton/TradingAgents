@@ -1,6 +1,10 @@
 import time
 import json
 
+from tradingagents.position_management import (
+    POSITION_MODE_LONG_ONLY,
+    normalize_position_mode,
+)
 from tradingagents.position_management.prompt_context import format_position_context
 
 
@@ -13,7 +17,8 @@ def create_research_manager(llm, memory):
         fundamentals_report = state["fundamentals_report"]
         current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
-        position_context = format_position_context(current_position)
+        position_mode = normalize_position_mode(state.get("position_mode", "long_short"))
+        position_context = format_position_context(current_position, position_mode)
         position_is_open = bool(current_position and current_position.get("open"))
 
         investment_debate_state = state["investment_debate_state"]
@@ -25,19 +30,30 @@ def create_research_manager(llm, memory):
         for i, rec in enumerate(past_memories, 1):
             past_memory_str += rec["recommendation"] + "\n\n"
 
-        if position_is_open:
+        if position_mode == POSITION_MODE_LONG_ONLY and position_is_open:
             exposure_guidance = (
                 "A position is already open. Explicitly account for existing exposure by stating whether to maintain, "
-                "add, reduce, or exit, and ensure your plan is coherent with existing stop_loss/take_profit context."
+                "modify, or exit using SELL/MODIFY semantics, and ensure your plan is coherent with existing stop_loss/take_profit context."
+            )
+        elif position_mode == POSITION_MODE_LONG_ONLY:
+            exposure_guidance = (
+                "No position is currently open. Focus on whether to initiate long exposure (BUY) with a stop_loss; "
+                "do not suggest short-selling actions in long_only mode."
+            )
+        elif position_is_open:
+            exposure_guidance = (
+                "A position is already open. Explicitly account for existing side exposure and whether to modify or close "
+                "it with the correct action semantics."
             )
         else:
             exposure_guidance = (
-                "No position is currently open. Focus on entry-readiness and avoid language that assumes active exposure."
+                "No position is currently open. Focus on entry-readiness for either long (BUY) or short (SELL_SHORT) setups "
+                "and avoid language that assumes active exposure."
             )
 
-        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive decision: align with the bear analyst, the bull analyst, or choose Hold only if it is strongly justified based on the arguments presented.
+        prompt = f"""As the portfolio manager and debate facilitator, your role is to critically evaluate this round of debate and make a definitive directional plan aligned to position-mode constraints.
 
-Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation—Buy, Sell, or Hold—must be clear and actionable. Avoid defaulting to Hold simply because both sides have valid points; commit to a stance grounded in the debate's strongest arguments.
+Summarize the key points from both sides concisely, focusing on the most compelling evidence or reasoning. Your recommendation must be clear and actionable using the currently allowed decision semantics. Avoid indecisive fallback language; commit to a stance grounded in the debate's strongest arguments.
 
 Additionally, develop a detailed investment plan for the trader. This should include:
 

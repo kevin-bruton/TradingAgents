@@ -15,3 +15,12 @@
 - Data vendor selection uses `data_vendors` (category defaults) and `tool_vendors` (per-tool overrides); values can be comma-separated to enable fallback order. Alpha Vantage rate limits trigger automatic vendor fallback.
 - Agent state fields must match `AgentState`/`InvestDebateState`/`RiskDebateState` in `agents/utils/agent_states.py` because LangGraph state wiring depends on those keys.
 - `.env` is loaded via `dotenv` in CLI/scripts; keep API keys in `.env` (see `.env.example`).
+
+## Position management and recommendation semantics
+- Recommendation semantics are mode-aware via `config["position_mode"]`:
+  - `long_only`: `BUY` (open long), `SELL` (close long), `MODIFY` (update stop/take on open long)
+  - `long_short`: `BUY`, `SELL`, `SELL_SHORT` (open short), `BUY_TO_COVER` (close short), `MODIFY`
+- Open positions must always have numeric `stop_loss`; this is enforced in loader, signal validation, and guardrails.
+- Position schema lives in `tradingagents/position_management/schema.py` and loader/saver logic is in `tradingagents/position_management/loader.py`.
+- Use `apply_decision_to_position` and related helpers in `tradingagents/position_management/actions.py` for decision-to-position transitions instead of re-implementing action logic.
+- `run.py` and `main.py` load from `current_positions.yaml` and persist updated state to `current_positions.updated.yaml` (input file remains immutable).

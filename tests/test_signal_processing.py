@@ -55,36 +55,67 @@ class SignalProcessorTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "confidence_pct"):
             self.processor.process_signal(signal)
 
+    def test_process_signal_rejects_short_entry_in_long_only_mode(self) -> None:
+        signal = _build_signal(decision="SELL_SHORT", stop_loss=120.0)
+        with self.assertRaisesRegex(ValueError, "not allowed for position_mode 'long_only'"):
+            self.processor.process_signal(signal, position_mode="long_only")
+
+    def test_process_signal_accepts_buy_to_cover_for_open_short(self) -> None:
+        signal = _build_signal(
+            decision="BUY_TO_COVER",
+            stop_loss=None,
+            take_profit=None,
+            confidence_pct=61.0,
+        )
+        current_position = {
+            "open": True,
+            "stop_loss": 120.0,
+            "take_profit": 95.0,
+            "side": "short",
+        }
+        parsed = self.processor.process_signal(
+            signal,
+            current_position=current_position,
+            position_mode="long_short",
+        )
+        self.assertEqual(parsed["decision"], "BUY_TO_COVER")
+
 
 class GuardrailTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.current_position = {
+        self.current_long_position = {
             "open": True,
             "stop_loss": 100.0,
             "take_profit": 130.0,
             "side": "long",
         }
+        self.current_short_position = {
+            "open": True,
+            "stop_loss": 125.0,
+            "take_profit": 95.0,
+            "side": "short",
+        }
 
-    def test_guardrail_clamps_looser_stop(self) -> None:
+    def test_guardrail_clamps_looser_long_stop(self) -> None:
         decision = {
-            "decision": "BUY",
+            "decision": "MODIFY",
             "stop_loss": 95.0,
             "take_profit": 130.0,
             "confidence_pct": 66.0,
-            "rationale": "BUY setup remains valid.",
+            "rationale": "Tighten risk setup.",
         }
 
         adjusted = apply_trailing_stop_guardrail(
-            decision, self.current_position, current_price=120.0
+            decision, self.current_long_position, current_price=120.0
         )
 
         self.assertEqual(adjusted["stop_loss"], 100.0)
         self.assertIn("SYSTEM WARNING:", adjusted["rationale"])
         self.assertEqual(decision["stop_loss"], 95.0)
 
-    def test_guardrail_allows_tighter_stop(self) -> None:
+    def test_guardrail_allows_tighter_long_stop(self) -> None:
         decision = {
-            "decision": "HOLD",
+            "decision": "MODIFY",
             "stop_loss": 104.0,
             "take_profit": 130.0,
             "confidence_pct": 61.0,
@@ -92,23 +123,24 @@ class GuardrailTests(unittest.TestCase):
         }
 
         adjusted = apply_trailing_stop_guardrail(
-            decision, self.current_position, current_price=120.0
+            decision, self.current_long_position, current_price=120.0
         )
 
         self.assertEqual(adjusted["stop_loss"], 104.0)
         self.assertNotIn("SYSTEM WARNING:", adjusted["rationale"])
 
-    def test_guardrail_raises_for_missing_stop_on_open_long(self) -> None:
+    def test_guardrail_preserves_existing_stop_when_missing(self) -> None:
         decision = {
-            "decision": "BUY",
+            "decision": "MODIFY",
             "stop_loss": None,
             "take_profit": 130.0,
             "confidence_pct": 58.0,
-            "rationale": "BUY but missing stop.",
+            "rationale": "Adjust target only.",
         }
 
-        with self.assertRaisesRegex(ValueError, "numeric stop_loss"):
-            apply_trailing_stop_guardrail(decision, self.current_position)
+        adjusted = apply_trailing_stop_guardrail(decision, self.current_long_position)
+        self.assertEqual(adjusted["stop_loss"], 100.0)
+        self.assertIn("SYSTEM WARNING:", adjusted["rationale"])
 
     def test_guardrail_skips_validation_for_sell_close(self) -> None:
         decision = {
@@ -119,9 +151,24 @@ class GuardrailTests(unittest.TestCase):
             "rationale": "Close the position.",
         }
 
-        adjusted = apply_trailing_stop_guardrail(decision, self.current_position)
+        adjusted = apply_trailing_stop_guardrail(decision, self.current_long_position)
         self.assertIsNone(adjusted["stop_loss"])
         self.assertEqual(adjusted["rationale"], "Close the position.")
+
+    def test_guardrail_clamps_looser_short_stop(self) -> None:
+        decision = {
+            "decision": "MODIFY",
+            "stop_loss": 130.0,
+            "take_profit": 90.0,
+            "confidence_pct": 63.0,
+            "rationale": "Adjust short risk.",
+        }
+
+        adjusted = apply_trailing_stop_guardrail(
+            decision, self.current_short_position, current_price=110.0
+        )
+        self.assertEqual(adjusted["stop_loss"], 125.0)
+        self.assertIn("SYSTEM WARNING:", adjusted["rationale"])
 
 
 if __name__ == "__main__":

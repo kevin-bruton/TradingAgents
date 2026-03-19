@@ -25,6 +25,7 @@ from rich.rule import Rule
 
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.agents.utils.agent_utils import get_market_context
 from tradingagents.position_management import (
     TradeDecision,
     apply_trailing_stop_guardrail,
@@ -1111,8 +1112,15 @@ def run_analysis():
         update_display(layout, spinner_text, stats_handler=stats_handler, start_time=start_time)
 
         # Initialize state and get graph args with callbacks
-        init_agent_state = graph.propagator.create_initial_state(
+        market_info = get_market_context(
             selections["ticker"], selections["analysis_date"]
+        )
+        init_agent_state = graph.propagator.create_initial_state(
+            selections["ticker"],
+            selections["analysis_date"],
+            market_info["current_price"],
+            market_info["market_data"],
+            position_mode=config.get("position_mode", "long_short"),
         )
         # Pass callbacks to graph config for tool execution tracking
         # (LLM tracking is handled separately via LLM constructor)
@@ -1225,10 +1233,22 @@ def run_analysis():
 
         # Get final state and decision
         final_state = trace[-1]
-        parsed_decision = graph.process_signal(final_state["final_trade_decision"])
+        current_position = final_state.get("current_position")
+        position_mode = final_state.get("position_mode", config.get("position_mode", "long_short"))
+        parsed_decision = graph.process_signal(
+            final_state["final_trade_decision"],
+            current_position=current_position,
+            position_mode=position_mode,
+        )
+        current_price_raw = final_state.get("current_price")
+        try:
+            current_price = float(current_price_raw) if current_price_raw is not None else None
+        except (TypeError, ValueError):
+            current_price = None
         decision = apply_trailing_stop_guardrail(
             parsed_decision,
-            final_state.get("current_position"),
+            current_position,
+            current_price=current_price,
         )
         final_state["parsed_trade_decision"] = decision
 

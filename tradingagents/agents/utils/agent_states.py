@@ -56,6 +56,7 @@ class AgentState(MessagesState):
     current_position: Annotated[
         Optional[PositionConfig], "Current position information for the symbol"
     ]
+    position_mode: Annotated[str, "Position recommendation mode: long_only or long_short"]
 
     sender: Annotated[str, "Agent that sent this message"]
 

@@ -1,6 +1,10 @@
 import time
 import json
 
+from tradingagents.position_management import (
+    POSITION_MODE_LONG_ONLY,
+    normalize_position_mode,
+)
 from tradingagents.position_management.prompt_context import format_position_context
 
 
@@ -19,17 +23,29 @@ def create_aggressive_debator(llm):
         fundamentals_report = state["fundamentals_report"]
         current_price = state.get("current_price", "Unknown")
         current_position = state.get("current_position")
-        position_context = format_position_context(current_position)
+        position_mode = normalize_position_mode(state.get("position_mode", "long_short"))
+        position_context = format_position_context(current_position, position_mode)
         position_is_open = bool(current_position and current_position.get("open"))
+        position_side = str(current_position.get("side", "long")) if current_position else "long"
 
         trader_decision = state["trader_investment_plan"]
 
-        if position_is_open:
-            stop_guidance = """- Evaluate whether the proposed stop_loss is consistent with trailing-stop discipline for an open long position.
-- Call out any recommendation that loosens stop_loss versus the existing stop as a critical violation."""
+        if position_mode == POSITION_MODE_LONG_ONLY:
+            if position_is_open:
+                stop_guidance = """- Evaluate whether SELL vs MODIFY is chosen coherently for an open long position.
+- For MODIFY, verify stop_loss remains numeric and does not loosen downside protection."""
+            else:
+                stop_guidance = """- With no open long position, only BUY is valid.
+- BUY must include numeric stop_loss; reject invalid close/modify actions."""
+        elif not position_is_open:
+            stop_guidance = """- With no open position, only BUY or SELL_SHORT should be proposed.
+- Entry actions must include numeric stop_loss; reject close/modify actions without exposure."""
+        elif position_side == "long":
+            stop_guidance = """- For an open long position, only SELL or MODIFY is coherent.
+- For MODIFY, verify stop_loss stays numeric and does not loosen protection."""
         else:
-            stop_guidance = """- Since no position is currently open, ensure stop_loss/take_profit are attached only to BUY recommendations.
-- Flag HOLD/SELL recommendations that include active stop_loss/take_profit as inconsistent with position state."""
+            stop_guidance = """- For an open short position, only BUY_TO_COVER or MODIFY is coherent.
+- For MODIFY, verify stop_loss stays numeric and does not loosen protection."""
 
         prompt = f"""As the Aggressive Risk Analyst, your role is to actively champion high-reward, high-risk opportunities, emphasizing bold strategies and competitive advantages. When evaluating the trader's decision or plan, focus intently on the potential upside, growth potential, and innovative benefits—even when these come with elevated risk. Use the provided market data and sentiment analysis to strengthen your arguments and challenge the opposing views. Specifically, respond directly to each point made by the conservative and neutral analysts, countering with data-driven rebuttals and persuasive reasoning. Highlight where their caution might miss critical opportunities or where their assumptions may be overly conservative.
 

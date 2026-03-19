@@ -20,9 +20,10 @@ class Propagator:
         self,
         company_name: str,
         trade_date: str,
-        current_price: str,
-        market_context: dict,
+        current_price: str = "Unknown",
+        market_context: Optional[dict] = None,
         current_position: Optional[PositionConfig] = None,
+        position_mode: str = "long_short",
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
         return {
@@ -30,8 +31,9 @@ class Propagator:
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "current_price": str(current_price),
-            "market_context": market_context,
+            "market_context": market_context or {},
             "current_position": current_position,
+            "position_mode": position_mode,
             "investment_debate_state": InvestDebateState(
                 {"history": "", "current_response": "", "count": 0}
             ),
