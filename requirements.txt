@@ -22,3 +22,4 @@ typer
 questionary
 langchain_anthropic
 langchain-google-genai
+plotly>=5.0.0

@@ -1,48 +1,48 @@
 CAT:
   open: false
-  side: long
+  side: short
   stop_loss: null
   take_profit: null
 JPM:
   open: true
   side: short
-  stop_loss: 300.91
-  take_profit: 278.91
+  stop_loss: 302.5
+  take_profit: 285.0
 LLY:
+  open: true
+  side: long
+  stop_loss: 880.0
+  take_profit: 950.0
+NEE:
   open: false
   side: long
   stop_loss: null
   take_profit: null
-NEE:
-  open: true
-  side: short
-  stop_loss: 93.0
-  take_profit: 86.5
 NEM:
-  open: true
-  side: short
-  stop_loss: 99.8
-  take_profit: 91.5
-NVDA:
-  open: true
-  side: short
-  stop_loss: 189.0
-  take_profit: 172.0
-PLD:
   open: false
-  side: short
+  side: long
   stop_loss: null
   take_profit: null
+NVDA:
+  open: true
+  side: long
+  stop_loss: 170.0
+  take_profit: 184.0
+PLD:
+  open: true
+  side: short
+  stop_loss: 133.5
+  take_profit: 124.0
 TSLA:
   open: true
   side: short
-  stop_loss: 395.0
-  take_profit: 345.0
+  stop_loss: 389.0
+  take_profit: 350.0
 WMT:
-  open: false
+  open: true
   side: short
-  stop_loss: null
-  take_profit: null
+  stop_loss: 123.0
+  take_profit: 117.0
 XOM:
   open: false
   side: short

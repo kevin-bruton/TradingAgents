@@ -108,7 +108,14 @@ class OrderMapper:
         open_orders: list[IBOpenOrder],
         market_open: bool,
     ) -> list[IBOrderRequest]:
-        """BUY / SELL_SHORT → bracket entry + cancel any stale risk orders."""
+        """BUY / SELL_SHORT → bracket entry + cancel any stale risk orders.
+
+        Always uses MKT order type regardless of market hours.  A MKT/DAY order
+        submitted pre-market is held in the IB queue and fills at or near the
+        opening print — functionally the same as MOO.  MOO order type is
+        intentionally avoided here because IB does not support bracket children
+        (stop-loss / take-profit linked via parentId) on a MOO parent order.
+        """
         if quantity is None or quantity < 1:
             raise ValueError(
                 f"Cannot open position for '{symbol}': quantity must be >= 1 "
@@ -125,11 +132,11 @@ class OrderMapper:
                 symbol=symbol,
                 action=ib_action,
                 quantity=float(quantity),
-                order_type="MOO" if market_open is False else "MKT",
+                order_type="MKT",
                 stop_price=stop_loss,
                 take_profit_price=take_profit,
                 is_bracket=True,
-                market_on_open=not market_open,
+                market_on_open=False,
                 modify_order_id=None,
                 cancel_order_ids=cancel_ids,
             )
@@ -142,7 +149,11 @@ class OrderMapper:
         open_orders: list[IBOpenOrder],
         market_open: bool,
     ) -> list[IBOrderRequest]:
-        """SELL / BUY_TO_COVER → cancel risk orders then close with MKT or MOO."""
+        """SELL / BUY_TO_COVER → cancel risk orders then close with a MKT order.
+
+        Always uses MKT.  A pre-market MKT/DAY order is held and fills at the
+        open; during-market it fills immediately.
+        """
         # IB action: SELL → "SELL"; BUY_TO_COVER → "BUY"
         ib_action: Literal["BUY", "SELL"] = "SELL" if action == "SELL" else "BUY"
 
@@ -153,11 +164,11 @@ class OrderMapper:
                 symbol=symbol,
                 action=ib_action,
                 quantity=None,   # place_orders.py resolves from IB portfolio
-                order_type="MOO" if not market_open else "MKT",
+                order_type="MKT",
                 stop_price=None,
                 take_profit_price=None,
                 is_bracket=False,
-                market_on_open=not market_open,
+                market_on_open=False,
                 modify_order_id=None,
                 cancel_order_ids=cancel_ids,
             )
@@ -170,7 +181,17 @@ class OrderMapper:
         take_profit: Optional[float],
         open_orders: list[IBOpenOrder],
     ) -> list[IBOrderRequest]:
-        """MODIFY → update existing STP/LMT orders in-place (or create if missing)."""
+        """MODIFY → cancel existing STP/LMT orders and recreate with updated levels.
+
+        Uses cancel-then-create rather than in-place modification so that the
+        operation succeeds even when the existing order belongs to a previous API
+        session.  The old order is cancelled first (via cancel_order_ids) and a
+        fresh standalone GTC order is placed at the new price level.
+
+        If no existing order is found the new order is created without a
+        preceding cancellation (place_orders.py resolves action/quantity from the
+        live IB portfolio in that case).
+        """
         requests: list[IBOrderRequest] = []
 
         existing_stop = next(
@@ -183,6 +204,7 @@ class OrderMapper:
         # --- stop-loss ---
         if stop_loss is not None:
             if existing_stop is not None:
+                # Cancel old stop and place a fresh GTC stop at the new level.
                 requests.append(
                     IBOrderRequest(
                         symbol=symbol,
@@ -193,16 +215,15 @@ class OrderMapper:
                         take_profit_price=None,
                         is_bracket=False,
                         market_on_open=False,
-                        modify_order_id=existing_stop["order_id"],
-                        cancel_order_ids=[],
+                        modify_order_id=None,
+                        cancel_order_ids=[existing_stop["order_id"]],
                     )
                 )
             else:
                 logger.warning(
-                    "MODIFY for %s: no existing STP order found; will create a new one.", symbol
+                    "MODIFY for %s: no existing STP order found; will create a new standalone GTC stop.",
+                    symbol,
                 )
-                # Caller (place_orders.py) must provide the close-side action and
-                # current quantity — we emit a "create" request (modify_order_id=None).
                 requests.append(
                     IBOrderRequest(
                         symbol=symbol,
@@ -221,6 +242,7 @@ class OrderMapper:
         # --- take-profit ---
         if take_profit is not None:
             if existing_tp is not None:
+                # Cancel old limit and place a fresh GTC limit at the new level.
                 requests.append(
                     IBOrderRequest(
                         symbol=symbol,
@@ -231,13 +253,14 @@ class OrderMapper:
                         take_profit_price=take_profit,
                         is_bracket=False,
                         market_on_open=False,
-                        modify_order_id=existing_tp["order_id"],
-                        cancel_order_ids=[],
+                        modify_order_id=None,
+                        cancel_order_ids=[existing_tp["order_id"]],
                     )
                 )
             else:
                 logger.warning(
-                    "MODIFY for %s: no existing LMT order found; will create a new one.", symbol
+                    "MODIFY for %s: no existing LMT order found; will create a new standalone GTC limit.",
+                    symbol,
                 )
                 requests.append(
                     IBOrderRequest(

@@ -44,6 +44,18 @@ class IBOpenOrder(TypedDict):
     status: str              # "PreSubmitted", "Submitted", etc.
 
 
+class CompletedTrade(TypedDict):
+    exec_id: str
+    symbol: str
+    datetime: str            # ISO-8601 UTC timestamp of the fill
+    action: str              # "BOT" (bought) or "SLD" (sold)
+    quantity: float
+    price: float             # fill price
+    commission: float
+    realized_pnl: Optional[float]   # None for opening fills; float for closes
+    currency: str
+
+
 # ---------------------------------------------------------------------------
 # IBClient
 # ---------------------------------------------------------------------------
@@ -131,6 +143,50 @@ class IBClient:
         """Return working orders for a single symbol."""
         return [o for o in self.get_open_orders() if o["symbol"] == symbol]
 
+    def get_completed_trades(self) -> list[CompletedTrade]:
+        """Return completed fills received during the current IB session.
+
+        Calls ``reqExecutions()`` with a default filter (today's executions) and
+        parses each ``Fill`` into a ``CompletedTrade``.  The ``realized_pnl``
+        field is populated only when IB reports a P&L figure, i.e. for fills that
+        partially or fully *close* an existing position; it is ``None`` for fills
+        that open a new position.
+        """
+        from ib_insync import ExecutionFilter
+
+        self._ib.reqExecutions(ExecutionFilter())
+        self._ib.sleep(2)
+
+        trades: list[CompletedTrade] = []
+        for fill in self._ib.fills():
+            execution = fill.execution
+            comm = fill.commissionReport
+
+            exec_time = execution.time
+            dt_str = exec_time.isoformat() if isinstance(exec_time, datetime) else str(exec_time)
+
+            rpnl: Optional[float] = None
+            commission = 0.0
+            if comm is not None:
+                if comm.realizedPNL is not None and not math.isnan(comm.realizedPNL):
+                    rpnl = float(comm.realizedPNL)
+                if comm.commission is not None and not math.isnan(comm.commission):
+                    commission = float(comm.commission)
+
+            trades.append(CompletedTrade(
+                exec_id=execution.execId,
+                symbol=fill.contract.symbol,
+                datetime=dt_str,
+                action=execution.side,   # "BOT" or "SLD"
+                quantity=float(execution.shares),
+                price=float(execution.price),
+                commission=commission,
+                realized_pnl=rpnl,
+                currency=fill.contract.currency,
+            ))
+
+        return trades
+
     def get_stop_and_take_profit_for_symbol(
         self, symbol: str
     ) -> tuple[Optional[float], Optional[float]]:
@@ -187,27 +243,118 @@ class IBClient:
         return (stop_price, tp_price)
 
     def get_last_price(self, symbol: str) -> float:
-        """Return the last traded price for *symbol* via a market-data snapshot."""
+        """Return the last traded price for *symbol*.
+
+        **Primary source — historical daily bars** (reqHistoricalData): requires no
+        market-data subscription and is always available via IB Gateway / TWS.
+        Returns the most recent daily close, which is accurate enough for position
+        sizing (quantity = floor(CAPITAL / price)).
+
+        **Fallback — live/delayed snapshot** (reqMarketDataType 3 then 1): only
+        attempted if historical data is unexpectedly unavailable.  Requires either
+        a paid live-data subscription or the free "Delayed" bundle to be enabled
+        in IB Account Management → Market Data Subscriptions.
+        """
         contract = self._qualify_contract(symbol)
-        ticker = self._ib.reqMktData(contract, "", True, False)
-        self._ib.sleep(2)
-        self._ib.cancelMktData(contract)
 
-        for candidate in (ticker.last, ticker.close, ticker.bid, ticker.ask):
-            if candidate is not None and not math.isnan(candidate) and candidate > 0:
-                return float(candidate)
+        # Primary: historical bars — no subscription required
+        try:
+            return self._get_price_from_history(contract, symbol)
+        except Exception as exc:
+            logger.warning(
+                "Historical data unavailable for %s (%s); trying market-data snapshot.", symbol, exc
+            )
 
-        raise ValueError(f"Could not retrieve last price for '{symbol}'.")
+        # Fallback: snapshot (requires subscription or free delayed bundle)
+        for data_type, label in ((3, "delayed"), (1, "live")):
+            self._ib.reqMarketDataType(data_type)
+            ticker = self._ib.reqMktData(contract, "", True, False)
+            self._ib.sleep(3)
+            self._ib.cancelMktData(contract)
+
+            for candidate in (ticker.last, ticker.close, ticker.bid, ticker.ask):
+                if candidate is not None and not math.isnan(candidate) and candidate > 0:
+                    self._ib.reqMarketDataType(1)
+                    logger.debug("Got %s price for %s: %.4f", label, symbol, candidate)
+                    return float(candidate)
+
+        self._ib.reqMarketDataType(1)
+        raise ValueError(
+            f"Could not retrieve last price for '{symbol}' via historical bars or market-data snapshot. "
+            "Verify the symbol is a valid US stock ticker and IB Gateway is connected."
+        )
+
+    def _get_price_from_history(self, contract, symbol: str) -> float:
+        """Return the most recent daily close via reqHistoricalData.
+
+        This endpoint requires no market-data subscription and works at any time
+        of day, including pre-market and after-hours.
+        """
+        bars = self._ib.reqHistoricalData(
+            contract,
+            endDateTime="",
+            durationStr="5 D",
+            barSizeSetting="1 day",
+            whatToShow="TRADES",
+            useRTH=True,
+            formatDate=1,
+            keepUpToDate=False,
+        )
+        if bars:
+            price = float(bars[-1].close)
+            logger.info("Using historical close price for %s: %.4f", symbol, price)
+            return price
+
+        raise ValueError(
+            f"Could not retrieve last price for '{symbol}' via live data, "
+            "delayed data, or historical bars. "
+            "Verify the symbol is a valid US stock ticker and IB Gateway is connected."
+        )
 
     def is_market_open(self, symbol: str) -> bool:
-        """Return True if the symbol's primary exchange is in its regular trading session."""
+        """Return True if the symbol's primary exchange is in its regular trading session.
+
+        Strategy (first successful answer wins):
+        1. Parse ``liquidHours`` from IB contract details + IB-provided timezone.
+        2. If liquidHours is empty or unparseable (common on paper-trading TWS),
+           fall back to a direct US/Eastern time check covering the standard
+           NYSE/NASDAQ session (Mon–Fri 09:30–16:00 ET).
+        3. If all else fails, assume **open** (True) — a MKT order submitted when
+           the market is closed is held until the next open, whereas a MOO order
+           submitted when the market IS open is immediately hard-rejected (error 321).
+        """
         contract = self._qualify_contract(symbol)
         details_list = self._ib.reqContractDetails(contract)
-        if not details_list:
-            logger.warning("No contract details returned for %s; assuming market closed.", symbol)
-            return False
-        details = details_list[0]
-        return _is_currently_in_session(details.liquidHours, details.timeZoneId)
+
+        if details_list:
+            liquid_hours = details_list[0].liquidHours
+            timezone_id = details_list[0].timeZoneId
+            if liquid_hours:
+                try:
+                    result = _is_currently_in_session(liquid_hours, timezone_id)
+                    logger.debug("is_market_open(%s) via IB liquidHours → %s", symbol, result)
+                    return result
+                except ValueError as exc:
+                    logger.warning(
+                        "liquidHours parse failed for %s (%s); "
+                        "falling back to US/Eastern hours check.",
+                        symbol, exc,
+                    )
+            else:
+                logger.warning(
+                    "liquidHours is empty in contract details for %s; "
+                    "falling back to US/Eastern hours check.",
+                    symbol,
+                )
+        else:
+            logger.warning(
+                "No contract details returned for %s; falling back to US/Eastern hours check.",
+                symbol,
+            )
+
+        result = _is_us_equity_market_hours()
+        logger.debug("is_market_open(%s) via US/Eastern fallback → %s", symbol, result)
+        return result
 
     # ------------------------------------------------------------------
     # Order placement methods
@@ -222,7 +369,13 @@ class IBClient:
         return trade
 
     def place_market_on_open_order(self, symbol: str, action: str, quantity: float):
-        """Place a Market-on-Open order that executes at the next regular-session open."""
+        """Place a standalone Market-on-Open order (no bracket children).
+
+        Note: IB does not support attaching bracket children (stop-loss / take-profit
+        linked via parentId) to a MOO parent.  Use place_bracket_order instead,
+        which uses a MKT parent and fills at or near the open when submitted
+        pre-market.
+        """
         contract = self._qualify_contract(symbol)
         order = Order(action=action, orderType="MOO", totalQuantity=quantity)
         trade = self._ib.placeOrder(contract, order)
@@ -258,10 +411,15 @@ class IBClient:
         take_profit_price: Optional[float],
         market_on_open: bool = False,
     ):
-        """Place entry (MKT or MOO) + optional stop + optional take-profit as an OCA group.
+        """Place a MKT entry + optional stop-loss + optional take-profit as an OCA group.
 
-        Child orders are linked to the parent via parentId and remain dormant
-        until the parent fills, so this is safe to submit before market open.
+        Always uses a MKT parent order.  A MKT/DAY order submitted pre-market is
+        held in the IB queue and fills at or near the opening print — the
+        ``market_on_open`` parameter is accepted for API compatibility but ignored
+        (MOO parent orders cannot carry bracket children in the IB API).
+
+        Child orders are linked via parentId and remain dormant until the parent
+        fills, so submitting this before the market opens is safe.
         Returns the parent Trade object.
         """
         contract = self._qualify_contract(symbol)
@@ -269,15 +427,24 @@ class IBClient:
         has_stop = stop_price is not None
         has_tp = take_profit_price is not None
 
-        # --- parent entry order ---
-        if market_on_open:
-            parent = Order(action=action, orderType="MOO", totalQuantity=quantity)
-        else:
-            parent = MarketOrder(action, quantity)
+        # --- parent entry order (always MKT) ---
+        parent = MarketOrder(action, quantity)
         parent.transmit = False
+        # Explicitly set tif so IB doesn't need to apply an order preset to fill in
+        # a missing value.  When tif is left unset, IB may apply the account's order
+        # preset and emit error 10349 ("Order TIF was set to DAY based on order
+        # preset"), which has been observed to trigger an immediate order cancellation
+        # in some account configurations.
+        parent.tif = "DAY"
 
         parent_trade = self._ib.placeOrder(contract, parent)
         parent_id = parent_trade.order.orderId
+
+        # Give IB Gateway time to register the parent before children reference it
+        # via parentId.  Without this brief pause, the children can arrive at the
+        # gateway before it has finished processing the parent, causing them to be
+        # rejected (parentId not found) and leaving the parent orphaned.
+        self._ib.sleep(1)
 
         oca_group = f"OCA_{symbol}_{parent_id}" if (has_stop and has_tp) else ""
 
@@ -291,6 +458,10 @@ class IBClient:
                 stop_order.ocaGroup = oca_group
                 stop_order.ocaType = 1
             stop_trade = self._ib.placeOrder(contract, stop_order)
+            logger.info(
+                "BRACKET child STP_%s: orderId=%s parentId=%s qty=%.0f stop=%.4f",
+                reverse_action, stop_trade.order.orderId, parent_id, quantity, stop_price,
+            )
 
         # --- take-profit child ---
         tp_trade = None
@@ -302,14 +473,31 @@ class IBClient:
                 tp_order.ocaGroup = oca_group
                 tp_order.ocaType = 1
             tp_trade = self._ib.placeOrder(contract, tp_order)
+            logger.info(
+                "BRACKET child LMT_%s: orderId=%s parentId=%s qty=%.0f lmt=%.4f",
+                reverse_action, tp_trade.order.orderId, parent_id, quantity, take_profit_price,
+            )
 
         # If no children, transmit the parent alone
         if not has_stop and not has_tp:
             parent.transmit = True
             parent_trade = self._ib.placeOrder(contract, parent)
 
+        # Allow IB time to process the complete bracket and surface any immediate
+        # rejection before the caller checks the order status.
+        self._ib.sleep(2)
+
         entry_type = "MOO" if market_on_open else "MKT"
         self._log_order(f"BRACKET_{entry_type}_{action}", symbol, parent_trade.order)
+
+        status = parent_trade.orderStatus.status
+        if status in ("Cancelled", "Inactive"):
+            logger.error(
+                "Bracket parent order %d for %s was %s shortly after placement. "
+                "Check IB order presets for TIF / outside-RTH conflicts.",
+                parent_id, symbol, status,
+            )
+
         return parent_trade
 
     def modify_stop_order(self, order_id: int, new_stop_price: float) -> None:
@@ -410,6 +598,9 @@ def _is_currently_in_session(liquid_hours: str, timezone_id: str) -> bool:
 
     IB format example:
         "20231204:0930-20231204:1600;20231205:CLOSED;20231206:0930-20231206:1600"
+
+    Returns True if the current time is within any listed session window.
+    Returns None (falsy) if no segment could be parsed — caller should fall back.
     """
     if not liquid_hours:
         return False
@@ -423,6 +614,7 @@ def _is_currently_in_session(liquid_hours: str, timezone_id: str) -> bool:
         tz = pytz.timezone("US/Eastern")
 
     now = datetime.now(tz)
+    parsed_any = False
 
     for segment in liquid_hours.split(";"):
         segment = segment.strip()
@@ -432,12 +624,34 @@ def _is_currently_in_session(liquid_hours: str, timezone_id: str) -> bool:
             start_str, end_str = segment.split("-", 1)
             start_dt = _parse_ib_datetime(start_str, tz)
             end_dt = _parse_ib_datetime(end_str, tz)
+            parsed_any = True
             if start_dt <= now <= end_dt:
                 return True
         except Exception as exc:
-            logger.debug("Could not parse trading hours segment '%s': %s", segment, exc)
+            logger.warning(
+                "Could not parse trading hours segment '%s': %s — skipping.", segment, exc
+            )
+
+    if not parsed_any:
+        # No segments parsed successfully; signal to caller to use fallback
+        raise ValueError(f"Could not parse any session from liquidHours: {liquid_hours!r}")
 
     return False
+
+
+def _is_us_equity_market_hours() -> bool:
+    """Return True if the current US/Eastern time is within the standard NYSE/NASDAQ session.
+
+    Used as a fallback when IB contract details are unavailable or unparseable.
+    Covers Mon–Fri 09:30–16:00 ET; does **not** account for market holidays.
+    """
+    from datetime import time as dt_time
+
+    tz = pytz.timezone("US/Eastern")
+    now = datetime.now(tz)
+    if now.weekday() >= 5:  # Saturday=5, Sunday=6
+        return False
+    return dt_time(9, 30) <= now.time() <= dt_time(16, 0)
 
 
 def _parse_ib_datetime(dt_str: str, tz: pytz.BaseTzInfo) -> datetime:

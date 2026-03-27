@@ -216,6 +216,11 @@ quantity = floor(CAPITAL_PER_POSITION / last_price)
 `CAPITAL_PER_POSITION` is read from the environment (default: `10000` USD). If the
 computed quantity is less than 1, the symbol is skipped with an error.
 
+`last_price` is obtained via IB historical daily bars (no market-data subscription
+required). If a live or free delayed-data subscription is available it is used
+instead for slightly better intraday accuracy, but historical close is sufficient
+for position sizing in practice.
+
 ### Sample output
 
 ```

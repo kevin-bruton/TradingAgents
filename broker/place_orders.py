@@ -14,7 +14,7 @@ import sys
 from datetime import date
 from math import floor
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import typer
 import yaml
@@ -43,8 +43,10 @@ load_dotenv()
 
 app = typer.Typer(add_completion=False)
 console = Console()
+logger = logging.getLogger(__name__)
 
 _FILL_TIMEOUT = float(os.getenv("IB_FILL_TIMEOUT", "30"))
+_PRICE_TOLERANCE = 1e-4  # tolerance for float price comparisons
 
 
 def _find_latest_decision_file() -> Optional[Path]:
@@ -302,6 +304,7 @@ def _process_symbols(
             }
 
         results.append(result)
+        input("Press Enter to go ahead and process the next symbol...")
 
     return results
 
@@ -319,6 +322,11 @@ def _execute_symbol(
     action = dec["decision"]
     open_orders = ib_client.get_open_orders_for_symbol(symbol)
     market_open = ib_client.is_market_open(symbol)
+    print(f"\nProcessing {symbol} (action={action}, market_open={market_open})")
+    print(f"  Current position: {current_pos}")
+    print(f"  Currently there are {len(open_orders)} open orders:")
+    for o in open_orders:
+        print(f"    {o}")
 
     # For opening decisions: compute quantity
     quantity: Optional[int] = None
@@ -337,6 +345,8 @@ def _execute_symbol(
         market_open=market_open,
         quantity=quantity,
     )
+    order_requests = _deduplicate_requests(order_requests, open_orders)
+    print(f"  Generated {len(order_requests)} order requests:")
 
     entry_type = "market open" if market_open else "market closed"
     detail_parts: list[str] = []
@@ -354,6 +364,7 @@ def _execute_symbol(
 
     # --- execute ---
     for req in order_requests:
+        print(f"  -> Executing order request: {req}")
         # Cancel stale risk orders first
         for oid in req.get("cancel_order_ids", []):
             try:
@@ -387,27 +398,29 @@ def _execute_symbol(
         # Execute the order
         trade = _place_request(req, symbol, resolved_qty, ib_client)
 
-        if req["order_type"] in ("MKT",) and not req.get("is_bracket"):
-            filled = ib_client._wait_for_fill(trade, _FILL_TIMEOUT)
-            status_str = "✅ filled" if filled else "⏳ pending"
-            fill_info = (
-                f"Filled {resolved_qty:.0f} @ {trade.orderStatus.avgFillPrice:.2f}"
-                if filled and trade.orderStatus.avgFillPrice
-                else "pending fill"
-            )
-            detail_parts.append(f"{fill_info} ({entry_type})")
-        elif req["order_type"] in ("MOO",) or (req.get("is_bracket") and not market_open):
-            detail_parts.append(f"MOO {resolved_qty:.0f} shares @ open ({entry_type})")
-            status_str = "🕐 queued"
-        elif req.get("is_bracket") and market_open:
-            filled = ib_client._wait_for_fill(trade, _FILL_TIMEOUT)
-            status_str = "✅ filled" if filled else "⏳ pending"
-            fill_info = (
-                f"Filled {resolved_qty:.0f} @ {trade.orderStatus.avgFillPrice:.2f}"
-                if filled and trade.orderStatus.avgFillPrice
-                else "pending fill"
-            )
-            detail_parts.append(f"{fill_info} ({entry_type})")
+        if req.get("is_bracket") or req["order_type"] == "MKT":
+            if market_open:
+                filled = ib_client._wait_for_fill(trade, _FILL_TIMEOUT)
+                status_str = "✅ filled" if filled else "⏳ pending"
+                fill_info = (
+                    f"Filled {resolved_qty:.0f} @ {trade.orderStatus.avgFillPrice:.2f}"
+                    if filled and trade.orderStatus.avgFillPrice
+                    else "pending fill"
+                )
+                detail_parts.append(f"{fill_info} ({entry_type})")
+            else:
+                # Pre-market MKT order queued; fills at open.
+                # place_bracket_order already sleeps 2 s before returning, so any
+                # immediate IB rejection should be reflected in the order status now.
+                order_status = trade.orderStatus.status
+                if order_status in ("Cancelled", "Inactive"):
+                    raise ValueError(
+                        f"[{symbol}] Bracket parent order was {order_status} immediately "
+                        "after placement. Check IB order presets for TIF / outside-RTH "
+                        "conflicts (error 10349 is a known trigger)."
+                    )
+                status_str = "🕐 queued"
+                detail_parts.append(f"MKT {resolved_qty:.0f} queued — fills at next open")
         else:
             status_str = "✅ done"
             detail_parts.append(_describe_request(req, action))
@@ -415,6 +428,10 @@ def _execute_symbol(
     if not detail_parts:
         status_str = "✅ done"
         detail_parts = ["no changes needed"]
+    
+    print("  Detail Parts:")
+    for part in detail_parts:
+        print(f"    {part}")
 
     return {
         "symbol": symbol,
@@ -423,6 +440,239 @@ def _execute_symbol(
         "status": status_str if "status_str" in dir() else "✅ done",
         "detail": "; ".join(detail_parts),
     }
+
+
+# ---------------------------------------------------------------------------
+# Order deduplication helpers
+# ---------------------------------------------------------------------------
+
+def _prices_equal(a: Optional[float], b: Optional[float]) -> bool:
+    """Return True if both values are None, or both non-None and within tolerance."""
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    return abs(a - b) < _PRICE_TOLERANCE
+
+
+def _deduplicate_requests(
+    order_requests: list[IBOrderRequest],
+    open_orders: list[IBOpenOrder],
+) -> list[IBOrderRequest]:
+    """Filter and transform *order_requests* so that no duplicate work is sent to IB.
+
+    Rules applied per request:
+
+    * **Bracket entry** (``is_bracket=True``): dropped if an open MKT/MOO order
+      with the same action and quantity already exists.
+    * **MKT / MOO** (non-bracket): dropped if an open order of the same type,
+      action, and quantity already exists.
+    * **STP** (new, ``modify_order_id=None``): dropped if an open STP at the
+      same stop price already exists; converted to a *modify* request when the
+      open STP is at a different price.
+    * **LMT** (new, ``modify_order_id=None``): same logic using limit price.
+    * **STP / LMT modify** (``modify_order_id`` set): dropped when the target
+      price already matches the open order (no-op modify).
+    """
+    result: list[IBOrderRequest] = []
+    for req in order_requests:
+        updated = _check_request_against_open(req, open_orders)
+        if updated is not None:
+            result.append(updated)
+    return result
+
+
+def _check_request_against_open(
+    req: IBOrderRequest,
+    open_orders: list[IBOpenOrder],
+) -> Optional[IBOrderRequest]:
+    """Return the (possibly updated) request, or ``None`` to drop it."""
+    symbol = req["symbol"]
+
+    # ------------------------------------------------------------------
+    # Bracket entry orders
+    # ------------------------------------------------------------------
+    if req.get("is_bracket"):
+        for o in open_orders:
+            if (
+                o["order_type"] in ("MKT", "MOO")
+                and o["action"] == req["action"]
+                # When req quantity is None (unresolved close), match on action
+                # alone; otherwise require the quantity to match too.
+                and (req["quantity"] is None or _prices_equal(o["quantity"], req["quantity"]))
+            ):
+                logger.info(
+                    "[%s] Dropping duplicate bracket: open %s %s qty=%.0f "
+                    "(order_id=%d) already exists.",
+                    symbol, o["order_type"], o["action"], o["quantity"], o["order_id"],
+                )
+                print(
+                    f"  [{symbol}] Skipping bracket order: open {o['order_type']} "
+                    f"{o['action']} qty={o['quantity']:.0f} "
+                    f"(order_id={o['order_id']}) already exists."
+                )
+                return None
+        return req
+
+    # ------------------------------------------------------------------
+    # Plain MKT / MOO orders
+    # ------------------------------------------------------------------
+    if req["order_type"] in ("MKT", "MOO") and req["modify_order_id"] is None:
+        for o in open_orders:
+            if (
+                o["order_type"] == req["order_type"]
+                and o["action"] == req["action"]
+                # When req quantity is None (unresolved close/cover order whose
+                # size will be looked up from the IB portfolio), skip the
+                # quantity check — matching on type + action is sufficient to
+                # identify the duplicate.
+                and (req["quantity"] is None or _prices_equal(o["quantity"], req["quantity"]))
+            ):
+                logger.info(
+                    "[%s] Dropping duplicate %s %s qty=%.0f (order_id=%d).",
+                    symbol, o["order_type"], o["action"], o["quantity"], o["order_id"],
+                )
+                print(
+                    f"  [{symbol}] Skipping {req['order_type']} order: open "
+                    f"{o['action']} qty={o['quantity']:.0f} "
+                    f"(order_id={o['order_id']}) already exists."
+                )
+                return None
+        return req
+
+    # ------------------------------------------------------------------
+    # STP orders
+    # ------------------------------------------------------------------
+    if req["order_type"] == "STP":
+        if req["modify_order_id"] is None:
+            # New or cancel-then-create STP request — check against any open STP order
+            existing = next((o for o in open_orders if o["order_type"] == "STP"), None)
+            if existing is not None:
+                if _prices_equal(existing["aux_price"], req["stop_price"]):
+                    # Same price: no-op regardless of whether this is a cancel-then-create
+                    # request or a plain new order.  Drop it to avoid a redundant round-trip.
+                    logger.info(
+                        "[%s] Dropping no-op STP at stop=%.4f (order_id=%d).",
+                        symbol, existing["aux_price"], existing["order_id"],
+                    )
+                    print(
+                        f"  [{symbol}] Skipping STP order: open stop={existing['aux_price']} "
+                        f"(order_id={existing['order_id']}) already at requested level."
+                    )
+                    return None
+                elif req.get("cancel_order_ids"):
+                    # cancel-then-create intent (from MODIFY decision): pass through unchanged.
+                    # Do NOT convert to in-place modify — the old order will be cancelled
+                    # first, then a fresh GTC stop is placed at the new level.
+                    logger.info(
+                        "[%s] STP cancel-then-create: order_id=%d stop %.4f → %.4f.",
+                        symbol, existing["order_id"],
+                        existing["aux_price"], req["stop_price"],
+                    )
+                    print(
+                        f"  [{symbol}] STP cancel-then-create: order_id={existing['order_id']} "
+                        f"stop {existing['aux_price']} → {req['stop_price']}."
+                    )
+                    return req
+                else:
+                    # Plain new STP with no cancellation intent: convert to in-place modify
+                    # as a safety net (e.g., a duplicate placement attempt).
+                    logger.info(
+                        "[%s] Converting STP create→modify: order_id=%d stop=%.4f → %.4f.",
+                        symbol, existing["order_id"],
+                        existing["aux_price"], req["stop_price"],
+                    )
+                    print(
+                        f"  [{symbol}] Converting STP to modify: order_id={existing['order_id']} "
+                        f"stop {existing['aux_price']} → {req['stop_price']}."
+                    )
+                    updated = dict(req)
+                    updated["modify_order_id"] = existing["order_id"]
+                    updated["action"] = existing["action"]
+                    updated["quantity"] = existing["quantity"]
+                    return cast(IBOrderRequest, updated)
+        else:
+            # Modify request — skip if the price hasn't changed
+            existing = next(
+                (o for o in open_orders if o["order_id"] == req["modify_order_id"]), None
+            )
+            if existing is not None and _prices_equal(existing["aux_price"], req["stop_price"]):
+                logger.info(
+                    "[%s] Skipping no-op STP modify: order_id=%d already at stop=%.4f.",
+                    symbol, req["modify_order_id"], req["stop_price"],
+                )
+                print(
+                    f"  [{symbol}] Skipping STP modify: order_id={req['modify_order_id']} "
+                    f"already at stop={req['stop_price']}."
+                )
+                return None
+        return req
+
+    # ------------------------------------------------------------------
+    # LMT (take-profit) orders
+    # ------------------------------------------------------------------
+    if req["order_type"] == "LMT":
+        if req["modify_order_id"] is None:
+            # New or cancel-then-create LMT request — check against any open LMT order
+            existing = next((o for o in open_orders if o["order_type"] == "LMT"), None)
+            if existing is not None:
+                if _prices_equal(existing["limit_price"], req["take_profit_price"]):
+                    # Same price: no-op.
+                    logger.info(
+                        "[%s] Dropping no-op LMT at limit=%.4f (order_id=%d).",
+                        symbol, existing["limit_price"], existing["order_id"],
+                    )
+                    print(
+                        f"  [{symbol}] Skipping LMT order: open limit={existing['limit_price']} "
+                        f"(order_id={existing['order_id']}) already at requested level."
+                    )
+                    return None
+                elif req.get("cancel_order_ids"):
+                    # cancel-then-create intent (from MODIFY decision): pass through unchanged.
+                    logger.info(
+                        "[%s] LMT cancel-then-create: order_id=%d limit %.4f → %.4f.",
+                        symbol, existing["order_id"],
+                        existing["limit_price"], req["take_profit_price"],
+                    )
+                    print(
+                        f"  [{symbol}] LMT cancel-then-create: order_id={existing['order_id']} "
+                        f"limit {existing['limit_price']} → {req['take_profit_price']}."
+                    )
+                    return req
+                else:
+                    # Plain new LMT with no cancellation intent: convert to in-place modify.
+                    logger.info(
+                        "[%s] Converting LMT create→modify: order_id=%d limit=%.4f → %.4f.",
+                        symbol, existing["order_id"],
+                        existing["limit_price"], req["take_profit_price"],
+                    )
+                    print(
+                        f"  [{symbol}] Converting LMT to modify: order_id={existing['order_id']} "
+                        f"limit {existing['limit_price']} → {req['take_profit_price']}."
+                    )
+                    updated = dict(req)
+                    updated["modify_order_id"] = existing["order_id"]
+                    updated["action"] = existing["action"]
+                    updated["quantity"] = existing["quantity"]
+                    return cast(IBOrderRequest, updated)
+        else:
+            # Modify request — skip if the price hasn't changed
+            existing = next(
+                (o for o in open_orders if o["order_id"] == req["modify_order_id"]), None
+            )
+            if existing is not None and _prices_equal(existing["limit_price"], req["take_profit_price"]):
+                logger.info(
+                    "[%s] Skipping no-op LMT modify: order_id=%d already at limit=%.4f.",
+                    symbol, req["modify_order_id"], req["take_profit_price"],
+                )
+                print(
+                    f"  [{symbol}] Skipping LMT modify: order_id={req['modify_order_id']} "
+                    f"already at limit={req['take_profit_price']}."
+                )
+                return None
+        return req
+
+    return req
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +722,13 @@ def _place_request(req: IBOrderRequest, symbol: str, quantity: float, ib_client:
 def _describe_request(req: IBOrderRequest, decision: str) -> str:
     """Build a human-readable summary of a single IBOrderRequest."""
     if req["modify_order_id"] is not None:
+        if req["order_type"] == "STP":
+            return f"modify stop → {req['stop_price']}"
+        if req["order_type"] == "LMT":
+            return f"modify tp → {req['take_profit_price']}"
+
+    if req.get("cancel_order_ids") and req["order_type"] in ("STP", "LMT"):
+        # cancel-then-create path used by MODIFY decisions
         if req["order_type"] == "STP":
             return f"stop → {req['stop_price']}"
         if req["order_type"] == "LMT":

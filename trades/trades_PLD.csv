@@ -1,0 +1,3 @@
+exec_id,symbol,datetime,action,quantity,price,commission,realized_pnl,currency
+00025b49.69c5924b.01.01,PLD,2026-03-24T13:30:47+00:00,BOT,88.0,129.59,1.0,363.1828,USD
+00025b49.69c779b2.01.01,PLD,2026-03-25T13:30:07+00:00,SLD,76.0,130.41,1.01482,0.0,USD
