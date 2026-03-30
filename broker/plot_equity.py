@@ -158,6 +158,8 @@ def main(
 
     fig.show()
 
+def plot_equity():
+    app(standalone_mode=False)
 
 if __name__ == "__main__":
     app()

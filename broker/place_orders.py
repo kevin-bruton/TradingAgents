@@ -748,6 +748,8 @@ def _describe_request(req: IBOrderRequest, decision: str) -> str:
     qty = req["quantity"]
     return f"{entry} {qty:.0f}" if qty else entry
 
+def place_orders():
+    app(standalone_mode=False)
 
 if __name__ == "__main__":
     app()

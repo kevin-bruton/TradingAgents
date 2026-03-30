@@ -277,6 +277,35 @@ def _describe_change(
         return "no change"
     return ", ".join(parts)
 
+def sync_positions():
+    app(standalone_mode=False)
+    console.print()
+
+    try:
+        current_positions = load_current_positions(Path("current_positions.yaml"))
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]Error loading positions:[/red] {exc}")
+        raise typer.Exit(1)
+
+    show_current = False
+    if show_current:
+        table = Table(title="Current Positions", show_lines=True)
+        table.add_column("Symbol", style="bold cyan", no_wrap=True)
+        table.add_column("Open", style="bold green")
+        table.add_column("Side", style="bold yellow")
+        table.add_column("Stop Loss", style="bold magenta")
+        table.add_column("Take Profit", style="bold magenta")
+
+        for symbol, position in current_positions.items():
+            table.add_row(
+                symbol,
+                f"[green]{position['open']}[/green]",
+                f"[yellow]{position['side']}[/yellow]",
+                f"[magenta]{position['stop_loss']}[/magenta]" if position['stop_loss'] is not None else "",
+                f"[magenta]{position['take_profit']}[/magenta]" if position['take_profit'] is not None else "",
+            )
+
+        console.print(table)
 
 if __name__ == "__main__":
     app()

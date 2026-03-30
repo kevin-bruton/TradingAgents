@@ -6,6 +6,7 @@ imports ib_insync directly.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import os
@@ -82,6 +83,14 @@ class IBClient:
 
     def connect(self) -> None:
         """Connect to IB Gateway / TWS."""
+        # Python 3.10+ no longer auto-creates an event loop; ib_insync needs one.
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                raise RuntimeError("closed")
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
+
         try:
             self._ib.connect(
                 self._host,

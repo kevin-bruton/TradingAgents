@@ -239,6 +239,8 @@ def _append_new_trades(
 
     return len(new_trades)
 
+def update_trades():
+    app(standalone_mode=False)
 
 if __name__ == "__main__":
     app()
